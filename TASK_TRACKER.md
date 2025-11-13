@@ -11,14 +11,15 @@
 
 | Phase | Tasks Total | Completed | In Progress | Not Started | Deferred | Progress |
 |-------|-------------|-----------|-------------|-------------|----------|----------|
-| Phase 1: Data Processing | 5 | 0 | 1 | 2 | 2 | 🟡 10% |
+| Phase 1: Data Processing | 6 | 0 | 2 | 2 | 2 | 🟡 15% |
 | Phase 2: Analysis & Viz | 3 | 0 | 0 | 3 | 0 | ⚪ 0% |
 | Phase 3: ML & Analytics | 2 | 0 | 0 | 2 | 0 | ⚪ 0% |
 | Phase 4: Deployment | 3 | 0 | 1 | 2 | 0 | 🟡 10% |
-| **TOTAL** | **13** | **0** | **2** | **9** | **2** | **5%** |
+| **TOTAL** | **14** | **0** | **3** | **9** | **2** | **8%** |
 
 **📅 DEADLINE:** Mid-January 2025 for Phase 1 (nanoFACS + NTA only)  
-**⏸️ DEFERRED:** Tasks 1.4 & 1.5 (TEM) - Post January 2025
+**⏸️ DEFERRED:** Tasks 1.4 & 1.5 (TEM) - Post January 2025  
+**⭐ NEW (Nov 13):** Task 1.6 (AWS S3 Integration) - Client requirement
 
 ---
 
@@ -36,9 +37,10 @@
 - 🎯 Start Task 1.1 (FCS Parser Enhancement)
 
 **📋 Phase 1 Deliverables (By Mid-January 2025):**
-- ✅ Task 1.1: Enhanced FCS Parser (nanoFACS data)
+- ✅ Task 1.1: Enhanced FCS Parser (nanoFACS data + baseline workflow support)
 - ✅ Task 1.2: NTA Parser (ZetaView text files)
-- ✅ Task 1.3: Data Integration (unified dataset)
+- ✅ Task 1.3: Data Integration (unified dataset + baseline comparisons)
+- ⭐ Task 1.6: AWS S3 Integration (client requirement - NEW Nov 13)
 - ⏸️ Task 1.4 & 1.5: TEM Module - DEFERRED to post-January
 
 ---
@@ -101,7 +103,9 @@ Enhance existing FCS parser to handle batch processing with Parquet output, memo
   - [ ] Install Parquet support: `pip install pyarrow`
   - [ ] Install parallel processing: `pip install dask`
   - [ ] Install memory profiling: `pip install memory_profiler`
+  - [ ] Install AWS S3 support: `pip install boto3` (see Task 1.6)
   - [ ] Test Parquet conversion with test.csv
+  
 - [ ] **Core Parser Enhancement:**
   - [ ] Review existing parser code
   - [ ] Implement chunked reading (50K events per chunk)
@@ -110,16 +114,27 @@ Enhance existing FCS parser to handle batch processing with Parquet output, memo
   - [ ] Add parallel processing support (joblib/dask)
   - [ ] **NEW:** Implement memory-efficient processing (streaming)
   - [ ] **NEW:** Add explicit garbage collection
+  - [ ] **NEW (Nov 13):** Support S3 file paths as input (see Task 1.6)
+  
 - [ ] **Unified Data Model Integration:**
   - [ ] **NEW:** Generate unique sample_id from filename/metadata
-  - [ ] **NEW:** Extract standardized metadata (passage, fraction, antibody, etc.)
-  - [ ] **NEW:** Link to unified sample registry
+  - [ ] **NEW (Nov 13):** Parse biological_sample_id (e.g., "P5_F10") from filename
+  - [ ] **NEW (Nov 13):** Generate measurement_id (e.g., "P5_F10_CD81_0.25ug")
+  - [ ] **NEW (Nov 13):** Detect baseline vs test runs (check for "ISO", "Isotype")
+  - [ ] **NEW (Nov 13):** Parse antibody and concentration from filename
+  - [ ] **NEW (Nov 13):** Assign iteration numbers (baseline=1, tests=2,3,4...)
+  - [ ] **NEW (Nov 13):** Link test measurements to baseline_measurement_id
+  - [ ] Extract standardized metadata (passage, fraction, antibody, etc.)
+  - [ ] Link to unified sample registry
   - [ ] Implement filename parsing for experimental conditions
+  
 - [ ] **Output Generation:**
   - [ ] **CHANGED:** Save events as Parquet (was CSV)
   - [ ] **NEW:** Save with Snappy compression
   - [ ] **NEW:** Pre-calculate event statistics (mean, median, std for all 26 params)
   - [ ] **NEW:** Calculate gating statistics (debris %, EV gate %, marker+)
+  - [ ] **NEW (Nov 13):** Calculate baseline comparison deltas (if baseline exists)
+  - [ ] **NEW (Nov 13):** Store biological_sample_id, measurement_id, baseline_measurement_id
   - [ ] Generate consolidated metadata
   - [ ] Create processing status logs with memory usage
 - [ ] **Data Quality & Validation:**
@@ -313,24 +328,55 @@ processed_data/
 **Description:**  
 Create unified data schema combining nanoFACS and NTA data using three-layer architecture for integrated ML/analysis.
 
-**UPDATED SCOPE:**
+**UPDATED SCOPE (Nov 13, 2025):**
 This task is now **CRITICAL** for enabling ML training and cross-machine analysis. Creates the integrated dataset that combines both machines' measurements.
+
+**NEW REQUIREMENT:** Implement baseline + iterations workflow support:
+- Group measurements by biological_sample_id
+- Identify baseline measurements (isotype controls)
+- Calculate deltas/fold changes vs baseline
+- Generate baseline_comparison.parquet table
 
 **Tasks Breakdown:**
 - [ ] **Layer 1: Master Sample Registry**
   - [ ] **NEW:** Merge sample_metadata from Task 1.1 and 1.2
   - [ ] **NEW:** Reconcile sample_id across both machines
+  - [ ] **NEW (Nov 13):** Validate biological_sample_id grouping
+  - [ ] **NEW (Nov 13):** Verify baseline_measurement_id links
   - [ ] **NEW:** Handle samples with only one machine's data
   - [ ] **NEW:** Add quality flags and control indicators
   - [ ] Create comprehensive sample manifest
+  
 - [ ] **Layer 2: Machine-Specific Validation**
   - [ ] Validate nanoFACS statistics schema
   - [ ] Validate NTA statistics schema
   - [ ] Cross-check sample_id linkages
+  - [ ] **NEW (Nov 13):** Verify iteration sequences are complete
   - [ ] Identify orphaned samples (no matching sample)
-- [ ] **Layer 3: Integrated ML Dataset Creation**
-  - [ ] **NEW:** Merge nanoFACS and NTA statistics by sample_id
+  - [ ] **NEW (Nov 13):** Flag samples missing baselines
+  
+- [ ] **Layer 3: Baseline Comparison Module** ⭐ **NEW - Nov 13, 2025**
+  - [ ] Group measurements by biological_sample_id
+  - [ ] For each biological sample:
+    - [ ] Identify baseline measurement (is_baseline=True)
+    - [ ] Identify all test measurements (is_baseline=False)
+    - [ ] For each test measurement:
+      - [ ] Calculate delta_pct_marker_positive (test - baseline)
+      - [ ] Calculate fold_change_marker (test / baseline)
+      - [ ] Calculate delta_mean_fluorescence (test MFI - baseline MFI)
+      - [ ] Calculate fold_change_mfi (test MFI / baseline MFI)
+      - [ ] Determine significance (delta > threshold)
+      - [ ] Auto-generate interpretation ("Negative", "Weak", "Positive", "Strong")
+  - [ ] Handle dose-response analysis (multiple concentrations):
+    - [ ] Calculate dose-response slope
+    - [ ] Detect saturation
+  - [ ] Generate baseline_comparison.parquet table
+  - [ ] Add comparison quality flags
+  
+- [ ] **Layer 4: Integrated ML Dataset Creation** (formerly Layer 3)
+  - [ ] **NEW:** Merge nanoFACS and NTA statistics by biological_sample_id
   - [ ] **NEW:** Rename columns with prefixes (facs_, nta_)
+  - [ ] **NEW (Nov 13):** Include baseline delta features
   - [ ] **NEW:** Calculate cross-machine correlations
   - [ ] **NEW:** Compute derived features (purity_score, size_correlation)
   - [ ] **NEW:** Add quality labels for ML training
@@ -358,13 +404,16 @@ This task is now **CRITICAL** for enabling ML training and cross-machine analysi
 **Expected Deliverables:**
 - [ ] **NEW:** `unified_data/samples/sample_metadata.parquet` - Complete master registry
 - [ ] **NEW:** `unified_data/integrated/combined_features.parquet` - ML-ready dataset (BOTH machines)
+- [ ] **NEW (Nov 13):** `unified_data/integrated/baseline_comparison.parquet` - ⭐ Baseline vs test comparisons
 - [ ] **NEW:** `unified_data/integrated/quality_labels.parquet` - ML labels
 - [ ] **NEW:** `unified_data/integrated/correlation_analysis.parquet` - Cross-machine correlations
 - [ ] **NEW:** `scripts/create_integrated_dataset.py` - Integration script
+- [ ] **NEW (Nov 13):** `scripts/calculate_baseline_deltas.py` - ⭐ Baseline comparison module
 - [ ] `docs/DATA_SCHEMA.md` - Complete schema documentation
 - [ ] `docs/DATA_DICTIONARY.md` - Field definitions
 - [ ] `reports/data_quality_report.html` - Quality assessment
 - [ ] `reports/sample_inventory.csv` - Sample completeness tracking
+- [ ] **NEW (Nov 13):** `reports/baseline_comparison_summary.html` - Baseline analysis report
 
 **Output Schema (combined_features.parquet):**
 ```python
@@ -670,6 +719,175 @@ Total columns: ~370 (was 350)
 - **CRMIT Architecture:** Multi-modal fusion with TEM morphology features
 - Enables ML models to learn from TEM visual data alongside flow cytometry
 - Critical for "NTA vs TEM cross-validation" mentioned in CRMIT doc
+
+---
+
+### **PHASE 2: ANALYSIS & VISUALIZATION**
+
+---
+
+#### 🟡 Task 1.6: AWS S3 Storage Integration ⭐ **NEW - Nov 13, 2025**
+**Status:** 🟡 NOT STARTED (High Priority)  
+**Priority:** ⚠️ HIGH (Client Requirement)  
+**Assigned:** TBD  
+**Start Date:** Week 1-2 (Nov 13-26, 2025)  
+**Target Completion:** 1 week  
+**Depends On:** None (can run in parallel with other tasks)
+
+**Background:**  
+During Nov 13, 2025 meeting with CRMIT + BioVaram:
+- CRMIT tech lead demonstrated AWS S3 storage to client
+- **Client approved S3 for all file storage**
+- All raw files (FCS, NTA) will be stored in S3
+- All processed Parquet files will be stored in S3
+- Local storage will only be used for temporary caching during processing
+
+**Description:**  
+Implement AWS S3 integration for all file storage and retrieval operations. Update all parsers and data processing scripts to read from/write to S3.
+
+**Tasks Breakdown:**
+- [ ] **Setup & Configuration:**
+  - [ ] Install boto3: `pip install boto3`
+  - [ ] Set up AWS IAM roles and permissions
+  - [ ] Configure AWS credentials (access key, secret key)
+  - [ ] Create S3 bucket: `exosome-analysis-bucket`
+  - [ ] Set up bucket structure (raw_data/, processed_data/, integrated/)
+  - [ ] Enable S3 versioning for data history
+  - [ ] Configure S3 lifecycle policies (hot/warm/cold storage)
+
+- [ ] **Create S3 Utility Functions:**
+  - [ ] `scripts/s3_utils.py`:
+    - [ ] `upload_file_to_s3(local_path, s3_path)` - Upload single file
+    - [ ] `download_file_from_s3(s3_path, local_path)` - Download single file
+    - [ ] `list_s3_files(prefix)` - List files in S3 folder
+    - [ ] `read_parquet_from_s3(s3_path)` - Direct Parquet read
+    - [ ] `write_parquet_to_s3(df, s3_path)` - Direct Parquet write
+    - [ ] `upload_directory_to_s3(local_dir, s3_prefix)` - Batch upload
+    - [ ] `download_directory_from_s3(s3_prefix, local_dir)` - Batch download
+
+- [ ] **Update Task 1.1 (FCS Parser) for S3:**
+  - [ ] Modify parser to accept S3 paths: `s3://bucket/raw_data/nanofacs/*.fcs`
+  - [ ] Download FCS file to local cache before parsing
+  - [ ] Parse from cached file
+  - [ ] Upload processed Parquet to S3: `s3://bucket/processed_data/nanofacs/`
+  - [ ] Clean up local cache after upload
+  - [ ] Add retry logic for network failures
+
+- [ ] **Update Task 1.2 (NTA Parser) for S3:**
+  - [ ] Modify parser to read NTA text files from S3
+  - [ ] Download to cache, parse, upload results
+  - [ ] Handle S3 path in sample_metadata
+
+- [ ] **Update Task 1.3 (Data Integration) for S3:**
+  - [ ] Read statistics files from S3
+  - [ ] Write integrated datasets to S3
+  - [ ] Store combined_features.parquet in S3
+
+- [ ] **Configuration Management:**
+  - [ ] Create `config/s3_config.json`:
+    ```json
+    {
+      "bucket_name": "exosome-analysis-bucket",
+      "region": "us-east-1",
+      "raw_data_prefix": "raw_data/",
+      "processed_prefix": "processed_data/",
+      "integrated_prefix": "integrated/",
+      "cache_dir": "/tmp/exosome_cache/",
+      "enable_versioning": true
+    }
+    ```
+  - [ ] Load config in all scripts
+
+- [ ] **Testing:**
+  - [ ] Test upload 1 sample FCS file to S3
+  - [ ] Test download and parse from S3
+  - [ ] Test write Parquet to S3
+  - [ ] Test batch operations (10+ files)
+  - [ ] Measure performance (upload/download times)
+  - [ ] Test network error handling and retries
+  - [ ] Test with full dataset (70 files)
+
+- [ ] **Migration:**
+  - [ ] Upload existing FCS files to S3: `raw_data/nanofacs/`
+  - [ ] Upload existing NTA files to S3: `raw_data/nta/`
+  - [ ] Verify all files uploaded successfully
+  - [ ] Update file paths in metadata
+
+- [ ] **Documentation:**
+  - [ ] Create `docs/S3_SETUP_GUIDE.md`:
+    - [ ] AWS account setup
+    - [ ] IAM role configuration
+    - [ ] S3 bucket creation steps
+    - [ ] Credentials configuration
+    - [ ] Usage examples
+  - [ ] Update all existing docs with S3 paths
+  - [ ] Document S3 costs and optimization
+
+**Expected Deliverables:**
+- [ ] `scripts/s3_utils.py` - S3 helper functions (~200 lines)
+- [ ] `config/s3_config.json` - S3 configuration
+- [ ] `docs/S3_SETUP_GUIDE.md` - Setup documentation
+- [ ] Updated `scripts/parse_fcs_batch.py` (S3-enabled)
+- [ ] Updated `scripts/parse_nta_batch.py` (S3-enabled)
+- [ ] Updated `scripts/create_integrated_dataset.py` (S3-enabled)
+- [ ] `tests/test_s3_operations.py` - S3 unit tests
+
+**S3 Bucket Structure:**
+```
+s3://exosome-analysis-bucket/
+├── raw_data/
+│   ├── nanofacs/
+│   │   ├── P5_F10_ISO.fcs (12 MB each)
+│   │   ├── P5_F10_CD81_0.25ug.fcs
+│   │   └── ... (70 FCS files, ~840 MB total)
+│   └── nta/
+│       ├── P5_F10_NTA.txt
+│       └── ... (~70 text files, ~10 MB total)
+├── processed_data/
+│   ├── nanofacs/
+│   │   └── event_statistics.parquet (~5 MB)
+│   └── nta/
+│       └── nta_statistics.parquet (~1 MB)
+└── integrated/
+    ├── sample_metadata.parquet (~500 KB)
+    ├── baseline_comparison.parquet (~300 KB)
+    └── combined_features.parquet (~2 MB)
+```
+
+**Performance Targets:**
+- Upload 12MB FCS file: <10 seconds
+- Download 12MB FCS file: <5 seconds
+- Upload Parquet file: <2 seconds
+- List 70 files: <1 second
+- Batch upload 70 files: <5 minutes (parallel)
+
+**Success Criteria:**
+- ✅ Can read FCS files directly from S3
+- ✅ Can write Parquet files directly to S3
+- ✅ All 70 FCS files uploaded and accessible
+- ✅ Network errors handled gracefully with retries
+- ✅ Local cache cleaned up after processing
+- ✅ Performance meets targets
+
+**Cost Estimate:**
+- S3 Storage: ~1 GB total = ~$0.023/month
+- Data transfer: ~10 GB/month = ~$0.90/month
+- API requests: ~1000/month = ~$0.01/month
+- **Total: <$1/month** ✅
+
+**Dependencies:**
+- AWS account with S3 access
+- boto3 library
+- Network connectivity
+
+**Blockers:**
+- None - can implement independently
+
+**Notes:**
+- This task can run in parallel with Task 1.1/1.2 development
+- S3 integration is a client requirement (not optional)
+- Enables team collaboration (centralized storage)
+- Provides automatic backup and versioning
 
 ---
 
@@ -1587,11 +1805,32 @@ Create comprehensive documentation and training materials.
   - **SCOPE:** Phase 1 focus ONLY on Tasks 1.1, 1.2, 1.3 (nanoFACS + NTA)
   - **Future:** TEM (Task 1.4) and Western Blot to be implemented after January
   - **Timeline Revised:** 18-23 weeks → Now targeting ~10-12 weeks for Phase 1 delivery
-- 📊 **Revised Timeline Estimate:**
+- ✅ **MEETING UPDATE (Nov 13, 2025 - CRMIT + BioVaram):**
+  - **STORAGE:** Agreed on AWS S3 for all file storage (tech lead demonstrated)
+  - **WORKFLOW DISCOVERED:** Baseline + Multiple Iterations approach
+    - Sample runs FIRST with baseline (control/isotype)
+    - THEN same sample runs 5-6+ times with different fluorophores/antibodies
+    - OUTPUT: 5-6 FCS files for SAME biological sample
+    - REQUIREMENT: System must link and compare these iterations to baseline
+  - **MACHINE SPECS:** Target machines have ~32GB RAM (memory constraint confirmed)
+  - **DYNAMIC QUERIES:** System needs to fetch data based on user-specific requirements
+  - **PARQUET VALIDATION:** Need to confirm Parquet supports dynamic query scenarios
+- � **CRITICAL DESIGN IMPLICATIONS:**
+  - **sample_id Strategy:** Must differentiate biological sample vs technical replicate
+    - biological_sample_id (e.g., "P5_F10") - links all iterations
+    - measurement_id (e.g., "P5_F10_ISO", "P5_F10_CD81", "P5_F10_CD9") - individual runs
+  - **Baseline Linking:** Each sample needs baseline_measurement_id reference
+  - **Iteration Tracking:** Track sequence (baseline → iteration1 → iteration2...)
+  - **Comparison Logic:** Calculate delta from baseline (% change, fold change)
+  - **Memory Management:** 32GB constraint CRITICAL - chunked processing mandatory
+  - **S3 Integration:** Add boto3 for AWS S3 read/write operations
+  - **Dynamic Queries:** Parquet supports filtering - use pyarrow.parquet with filters
+- �📊 **Revised Timeline Estimate:**
   - Original (nanoFACS + NTA only): 18-23 weeks
   - With TEM + enhancements: 23-30 weeks (5.5-7.5 months)
   - CRMIT Original Estimate: 6-8 months ✅ STILL ALIGNED
   - **NEW TARGET:** Mid-January 2025 for nanoFACS + NTA (10-12 weeks from Nov 13)
+  - **WITH S3 + BASELINE LOGIC:** Add 1-2 weeks buffer (12-14 weeks total)
 
 ---
 

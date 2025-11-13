@@ -187,33 +187,59 @@ Project Structure (Unified):
 
 ### **Schema 1: Sample Metadata (Master Registry)**
 
+**UPDATED: Nov 13, 2025 - Baseline + Iterations Workflow**
+
 **File:** `unified_data/samples/sample_metadata.parquet`
+
+**Key Change:** System now supports **1 biological sample = 5-6 FCS files** (baseline + iterations)
 
 ```python
 import pandas as pd
 
 sample_metadata = pd.DataFrame({
-    'sample_id': ['S001', 'S002', 'S003', ...],  # Unique ID (PRIMARY KEY)
-    'sample_name': ['L5+F10', 'L5+F16', 'Lot1media+cd9', ...],
-    'experiment_date': ['2025-10-09', '2025-10-09', ...],
-    'passage': ['P2', 'P2', 'P1', ...],
-    'fraction': ['F10', 'F16', None, ...],  # None if not applicable
-    'lot_number': ['L5', 'L5', 'Lot1', ...],
-    'antibody': ['CD81', 'CD81', 'CD9', ...],
-    'antibody_conc_ug': [1.0, 1.0, 0.25, ...],
-    'purification_method': ['SEC', 'SEC', 'Centri', ...],
+    # === PRIMARY IDENTIFIERS (ENHANCED) ===
+    'biological_sample_id': ['P5_F10', 'P5_F10', 'P5_F10', 'P5_F16', ...],  # NEW: Groups iterations
+    'measurement_id': ['P5_F10_ISO', 'P5_F10_CD81_0.25ug', 'P5_F10_CD81_1ug', 'P5_F16_ISO', ...],  # NEW: Unique per file (PRIMARY KEY)
+    'sample_name': ['Exo+ ISO', 'Exo+ 0.25ug CD81', 'Exo+ 1ug CD81', ...],  # Original filename
+    
+    # === BIOLOGICAL SAMPLE INFO ===
+    'passage': ['P5', 'P5', 'P5', 'P5', ...],
+    'fraction': ['F10', 'F10', 'F10', 'F16', ...],
+    'lot_number': ['L5', 'L5', 'L5', 'L5', ...],
+    'purification_method': ['SEC', 'SEC', 'SEC', 'Centrifugation', ...],
+    'experiment_date': ['2025-10-09', '2025-10-09', '2025-10-09', ...],
+    
+    # === MEASUREMENT-SPECIFIC INFO (NEW) ===
+    'antibody': ['ISO', 'CD81', 'CD81', 'ISO', ...],  # Target antibody
+    'antibody_concentration_ug': [0, 0.25, 1.0, 0, ...],  # NEW: Numeric concentration
+    'is_baseline': [True, False, False, True, ...],  # NEW: Baseline/control flag
+    'baseline_measurement_id': ['P5_F10_ISO', 'P5_F10_ISO', 'P5_F10_ISO', 'P5_F16_ISO', ...],  # NEW: Links to baseline
+    'iteration_number': [1, 2, 3, 1, ...],  # NEW: Sequence (1=baseline, 2-6=tests)
+    'measurement_type': ['baseline', 'antibody_test', 'antibody_test', 'baseline', ...],  # NEW
+    
+    # === FILE PATHS (UPDATED FOR S3) ===
+    'nanofacs_s3_path': ['s3://bucket/raw/P5_F10_ISO.fcs', 's3://bucket/raw/P5_F10_CD81_0.25ug.fcs', ...],  # NEW
+    'nanofacs_local_path': ['/cache/P5_F10_ISO.fcs', None, ...],  # Local cache if exists
+    'nta_s3_path': ['s3://bucket/nta/P5_F10.txt', None, ...],  # One NTA per biological sample
+    'nta_local_path': ['/cache/P5_F10_nta.txt', None, ...],
+    
+    # === INSTRUMENT & ACQUISITION ===
+    'instrument': ['CytoFLEX nano BH46064', 'CytoFLEX nano BH46064', ...],
+    'acquisition_software': ['CytExpert 2.4', 'CytExpert 2.4', ...],
+    'total_events': [339392, 285103, ...],
+    'acquisition_time_sec': [30.0, 28.5, ...],
     'dilution_factor': [1000, 1000, 1, ...],
-    'operator': ['URAT', 'URAT', 'URAT', ...],
-    'notes': ['...', '...', '...', ...],
+    'operator': ['URAT', 'URAT', ...],
     
-    # Machine availability flags
-    'has_nanofacs_data': [True, True, False, ...],
-    'has_nta_data': [True, True, True, ...],
+    # === MACHINE AVAILABILITY ===
+    'has_nanofacs_data': [True, True, True, True, ...],
+    'has_nta_data': [True, False, False, True, ...],  # Typically one NTA per biological sample
     
-    # Quality flags
-    'quality_status': ['Pass', 'Pass', 'Warn', ...],
-    'is_control': [False, False, False, ...],
-    'control_type': [None, None, None, ...]  # 'blank', 'isotype', 'water'
+    # === QUALITY FLAGS ===
+    'quality_status': ['Pass', 'Pass', 'Pass', 'Warn', ...],
+    'is_control': [True, False, False, True, ...],  # Baseline = control
+    'control_type': ['isotype', None, None, 'isotype', ...],  # 'isotype', 'blank', 'water'
+    'notes': ['Baseline run', 'Test CD81 low dose', 'Test CD81 high dose', ...]
 })
 ```
 
@@ -227,11 +253,17 @@ sample_metadata = pd.DataFrame({
 
 ### **Schema 2: nanoFACS Statistics**
 
+**UPDATED: Nov 13, 2025 - Added Baseline Comparison Fields**
+
 **File:** `unified_data/measurements/nanofacs/statistics/event_statistics.parquet`
 
 ```python
 nanofacs_stats = pd.DataFrame({
-    'sample_id': ['S001', 'S002', ...],  # FOREIGN KEY → sample_metadata
+    # === IDENTIFIERS (ENHANCED) ===
+    'biological_sample_id': ['P5_F10', 'P5_F10', 'P5_F10', ...],  # NEW: Groups iterations
+    'measurement_id': ['P5_F10_ISO', 'P5_F10_CD81_0.25ug', 'P5_F10_CD81_1ug', ...],  # FOREIGN KEY (PRIMARY KEY)
+    'baseline_measurement_id': ['P5_F10_ISO', 'P5_F10_ISO', 'P5_F10_ISO', ...],  # NEW: Links to baseline
+    'is_baseline': [True, False, False, ...],  # NEW
     'measurement_date': ['2025-10-09 15:37:23', ...],
     'instrument': ['CytoFLEX nano BH46064', ...],
     
@@ -259,6 +291,16 @@ nanofacs_stats = pd.DataFrame({
     'pct_debris': [15.2, 18.5, ...],
     'pct_ev_gate': [72.3, 68.9, ...],
     'pct_marker_positive': [85.2, 78.5, ...],  # CD81+ or CD9+
+    'mean_fluorescence_intensity': [1250.5, 2150.8, ...],  # MFI
+    
+    # === BASELINE COMPARISON (NEW - Nov 13, 2025) ===
+    # NULL for baseline measurements, populated for test measurements
+    'delta_pct_marker_positive': [None, 40.0, 55.3, ...],  # % change from baseline
+    'delta_mean_fluorescence': [None, 900.3, 1400.5, ...],  # Absolute MFI change
+    'fold_change_marker': [None, 2.5, 3.8, ...],  # Fold increase vs baseline
+    'fold_change_mfi': [None, 1.7, 2.1, ...],  # MFI fold change
+    'is_significant_increase': [None, True, True, ...],  # TRUE if delta > threshold
+    'baseline_comparison_quality': ['N/A', 'reliable', 'reliable', ...],  # Quality of comparison
     
     # Data quality metrics
     'cv_FSC': [0.68, 0.67, ...],  # Coefficient of variation
@@ -272,11 +314,17 @@ nanofacs_stats = pd.DataFrame({
 
 ### **Schema 3: NTA Statistics**
 
+**UPDATED: Nov 13, 2025 - biological_sample_id linking**
+
 **File:** `unified_data/measurements/nta/summary/nta_statistics.parquet`
+
+**Note:** Typically ONE NTA measurement per biological sample (not per FCS file)
 
 ```python
 nta_stats = pd.DataFrame({
-    'sample_id': ['S001', 'S002', ...],  # FOREIGN KEY → sample_metadata
+    # === IDENTIFIERS (UPDATED) ===
+    'biological_sample_id': ['P5_F10', 'P5_F16', ...],  # NEW: Links to all FCS iterations
+    'nta_measurement_id': ['P5_F10_NTA', 'P5_F16_NTA', ...],  # Unique NTA ID (PRIMARY KEY)
     'measurement_date': ['2025-02-19', ...],
     'instrument': ['ZetaView 24-1152', ...],
     
@@ -309,7 +357,74 @@ nta_stats = pd.DataFrame({
 
 ---
 
-### **Schema 4: Integrated Dataset (ML-Ready)**
+### **Schema 4: Baseline Comparison Table** ⭐ **NEW - Nov 13, 2025**
+
+**File:** `unified_data/integrated/baseline_comparison.parquet`
+
+**Purpose:** Pre-calculated comparison of test measurements vs their baseline
+
+**Usage:** Quick lookup for "How much did marker expression increase?"
+
+```python
+baseline_comparison = pd.DataFrame({
+    # === IDENTIFIERS ===
+    'biological_sample_id': ['P5_F10', 'P5_F10', 'P5_F16', ...],  # Groups iterations
+    'baseline_measurement_id': ['P5_F10_ISO', 'P5_F10_ISO', 'P5_F16_ISO', ...],  # Reference
+    'test_measurement_id': ['P5_F10_CD81_0.25ug', 'P5_F10_CD81_1ug', 'P5_F16_CD81', ...],  # Test run
+    
+    # === TEST DETAILS ===
+    'antibody_tested': ['CD81', 'CD81', 'CD81', ...],
+    'antibody_concentration_ug': [0.25, 1.0, 1.0, ...],
+    'iteration_number': [2, 3, 2, ...],  # Test run sequence
+    
+    # === BASELINE VALUES ===
+    'baseline_pct_positive': [5.2, 5.2, 4.8, ...],  # Background/isotype %
+    'baseline_mfi': [350.5, 350.5, 340.2, ...],  # Baseline MFI
+    'baseline_pct_ev_gate': [72.3, 72.3, 70.5, ...],  # EV gate %
+    
+    # === TEST VALUES ===
+    'test_pct_positive': [45.2, 60.5, 38.9, ...],  # Specific signal %
+    'test_mfi': [1250.8, 1750.3, 920.5, ...],  # Test MFI
+    'test_pct_ev_gate': [71.8, 70.9, 69.8, ...],  # Should be similar to baseline
+    
+    # === CHANGES/DELTAS (MOST IMPORTANT) ===
+    'delta_pct_positive': [40.0, 55.3, 34.1, ...],  # Absolute % increase
+    'delta_mfi': [900.3, 1399.8, 580.3, ...],  # Absolute MFI increase
+    'fold_change_positive': [8.7, 11.6, 8.1, ...],  # Fold increase (test/baseline)
+    'fold_change_mfi': [3.6, 5.0, 2.7, ...],  # MFI fold change
+    
+    # === STATISTICAL SIGNIFICANCE ===
+    'is_significant': [True, True, True, ...],  # TRUE if passes threshold
+    'significance_threshold': [10.0, 10.0, 10.0, ...],  # % threshold used
+    'p_value': [0.001, 0.0001, 0.005, ...],  # If statistical test performed
+    
+    # === INTERPRETATION (AUTO-GENERATED) ===
+    'response_magnitude': ['Strong', 'Very Strong', 'Strong', ...],  # "Weak", "Moderate", "Strong", "Very Strong"
+    'interpretation': ['Positive', 'Positive', 'Positive', ...],  # "Negative", "Weak", "Positive", "Strong Positive"
+    'dose_response': [None, 'Increasing', None, ...],  # "Increasing", "Decreasing", "Saturated" (for conc. series)
+    
+    # === QUALITY FLAGS ===
+    'baseline_quality': ['Pass', 'Pass', 'Pass', ...],  # Quality of baseline run
+    'test_quality': ['Pass', 'Pass', 'Warn', ...],  # Quality of test run
+    'comparison_reliability': ['High', 'High', 'Medium', ...],  # "High", "Medium", "Low"
+    'warnings': ['', '', 'Low event count in test', ...],  # Any issues
+})
+```
+
+**Example Query:**
+```python
+# "Show me all samples with strong CD81 response"
+strong_cd81 = baseline_comparison[
+    (baseline_comparison['antibody_tested'] == 'CD81') &
+    (baseline_comparison['response_magnitude'] == 'Strong')
+]
+```
+
+---
+
+### **Schema 5: Integrated Dataset (ML-Ready)**
+
+**UPDATED: Nov 13, 2025 - Baseline-Aware Features**
 
 **File:** `unified_data/integrated/combined_features.parquet`
 
@@ -317,13 +432,19 @@ nta_stats = pd.DataFrame({
 
 ```python
 combined_features = pd.DataFrame({
-    # Sample identification (from sample_metadata)
-    'sample_id': ['S001', 'S002', ...],
-    'sample_name': ['L5+F10', 'L5+F16', ...],
-    'passage': ['P2', 'P2', ...],
-    'antibody': ['CD81', 'CD81', ...],
-    'antibody_conc_ug': [1.0, 1.0, ...],
-    'purification_method': ['SEC', 'SEC', ...],
+    # === IDENTIFIERS (UPDATED) ===
+    'biological_sample_id': ['P5_F10', 'P5_F10', 'P5_F16', ...],  # NEW: Groups iterations
+    'measurement_id': ['P5_F10_ISO', 'P5_F10_CD81_0.25ug', 'P5_F16_ISO', ...],  # PRIMARY KEY
+    'baseline_measurement_id': ['P5_F10_ISO', 'P5_F10_ISO', 'P5_F16_ISO', ...],  # NEW
+    'is_baseline': [True, False, True, ...],  # NEW
+    
+    # Sample metadata
+    'sample_name': ['Exo+ ISO', 'Exo+ 0.25ug CD81', ...],
+    'passage': ['P5', 'P5', 'P5', ...],
+    'antibody': ['ISO', 'CD81', 'ISO', ...],
+    'antibody_concentration_ug': [0, 0.25, 0, ...],  # NEW
+    'purification_method': ['SEC', 'SEC', 'SEC', ...],
+    'iteration_number': [1, 2, 1, ...],  # NEW
     
     # === nanoFACS Features (300+ features) ===
     # Size/complexity
@@ -338,27 +459,40 @@ combined_features = pd.DataFrame({
     # ... (all 26 parameters × statistics)
     
     # Gating results
-    'facs_pct_marker_positive': [85.2, 78.5, ...],
-    'facs_pct_ev_gate': [72.3, 68.9, ...],
+    'facs_pct_marker_positive': [5.2, 45.2, 4.8, ...],  # Raw values
+    'facs_pct_ev_gate': [72.3, 71.8, 70.5, ...],
+    'facs_mean_fluorescence_intensity': [350.5, 1250.8, 340.2, ...],
+    
+    # === BASELINE DELTAS (NEW) - NULL for baseline measurements ===
+    'facs_delta_pct_marker': [None, 40.0, None, ...],  # Change from baseline
+    'facs_fold_change_marker': [None, 8.7, None, ...],  # Fold increase
+    'facs_delta_mfi': [None, 900.3, None, ...],  # MFI change
+    'facs_baseline_normalized_mfi': [1.0, 3.6, 1.0, ...],  # MFI / baseline_MFI
     
     # === NTA Features (50+ features) ===
-    # Size distribution
-    'nta_D50_nm': [120.5, 115.8, ...],
-    'nta_mean_size': [125.3, 120.8, ...],
-    'nta_std_size': [35.8, 32.5, ...],
+    # Size distribution (one per biological sample)
+    'nta_D50_nm': [120.5, 120.5, 115.8, ...],  # Same for all iterations of bio sample
+    'nta_mean_size': [125.3, 125.3, 120.8, ...],
+    'nta_std_size': [35.8, 35.8, 32.5, ...],
     
     # Concentration
-    'nta_concentration': [2.5e11, 3.1e11, ...],
-    'nta_uniformity_score': [88.5, 90.2, ...],
+    'nta_concentration': [2.5e11, 2.5e11, 3.1e11, ...],
+    'nta_uniformity_score': [88.5, 88.5, 90.2, ...],
     
     # === Derived/Computed Features ===
     # Cross-machine correlations
     'size_correlation': [0.85, 0.78, ...],  # FSC vs D50 correlation
     'purity_score': [0.92, 0.88, ...],      # Combined metric
     
+    # === Response Features (NEW) ===
+    'response_magnitude': [None, 'Strong', None, ...],  # NULL for baseline
+    'response_direction': [None, 'increase', None, ...],  # "increase", "decrease", "no_change"
+    'dose_response_slope': [None, 0.55, None, ...],  # For concentration series
+    
     # === Labels (for ML) ===
-    'quality_label': ['Good', 'Good', 'Bad', ...],  # Classification target
-    'quality_score': [0.95, 0.88, 0.45, ...],       # Regression target
+    'quality_label': ['Good', 'Good', 'Good', ...],  # Classification target
+    'quality_score': [0.95, 0.88, 0.92, ...],       # Regression target
+    'baseline_quality': ['Pass', 'Pass', 'Pass', ...],  # NEW: Quality of linked baseline
 })
 ```
 
@@ -643,3 +777,312 @@ unified_data/
 
 **This gives you flexibility + consistency + power!** 🚀
 
+---
+
+## 🌐 **AWS S3 Storage Integration** ⭐ **NEW - Nov 13, 2025**
+
+### **Decision:** All file storage will use AWS S3 (not local/on-premise)
+
+**Background:** During Nov 13, 2025 meeting with CRMIT + BioVaram:
+- CRMIT tech lead demonstrated AWS S3 to client
+- Client approved S3 for all data storage
+- All raw files (FCS, NTA text) will be stored in S3
+- Processed Parquet files will also be stored in S3
+
+### **S3 Bucket Structure:**
+
+```
+s3://exosome-analysis-bucket/
+├── raw_data/
+│   ├── nanofacs/
+│   │   ├── P5_F10_ISO.fcs
+│   │   ├── P5_F10_CD81_0.25ug.fcs
+│   │   ├── P5_F10_CD81_1ug.fcs
+│   │   └── ... (70 FCS files)
+│   │
+│   └── nta/
+│       ├── P5_F10_NTA.txt
+│       ├── P5_F16_NTA.txt
+│       └── ... (~70 text files)
+│
+├── processed_data/
+│   ├── nanofacs/
+│   │   └── event_statistics.parquet  (all 70 samples)
+│   │
+│   └── nta/
+│       └── nta_statistics.parquet  (all samples)
+│
+└── integrated/
+    ├── sample_metadata.parquet
+    ├── baseline_comparison.parquet
+    └── combined_features.parquet
+```
+
+### **Implementation with boto3:**
+
+```python
+import boto3
+import pandas as pd
+from io import BytesIO
+
+# Initialize S3 client
+s3_client = boto3.client('s3', 
+                         region_name='us-east-1',
+                         aws_access_key_id='YOUR_KEY',
+                         aws_secret_access_key='YOUR_SECRET')
+
+BUCKET_NAME = 'exosome-analysis-bucket'
+
+# === READ FCS FILE FROM S3 ===
+def read_fcs_from_s3(s3_path):
+    """Download FCS file from S3 and parse"""
+    # Parse S3 path
+    # s3://bucket/raw_data/nanofacs/P5_F10_ISO.fcs
+    key = s3_path.replace(f's3://{BUCKET_NAME}/', '')
+    
+    # Download to local temp file
+    local_temp = f'/tmp/{key.split("/")[-1]}'
+    s3_client.download_file(BUCKET_NAME, key, local_temp)
+    
+    # Parse FCS
+    meta, events = fcsparser.parse(local_temp)
+    
+    # Clean up temp file
+    os.remove(local_temp)
+    
+    return meta, events
+
+# === WRITE PARQUET TO S3 ===
+def write_parquet_to_s3(df, s3_path):
+    """Write Parquet file directly to S3"""
+    # Write to in-memory buffer
+    buffer = BytesIO()
+    df.to_parquet(buffer, engine='pyarrow', compression='snappy')
+    
+    # Upload to S3
+    key = s3_path.replace(f's3://{BUCKET_NAME}/', '')
+    buffer.seek(0)
+    s3_client.upload_fileobj(buffer, BUCKET_NAME, key)
+    
+    print(f"✅ Uploaded to {s3_path}")
+
+# === READ PARQUET FROM S3 ===
+def read_parquet_from_s3(s3_path):
+    """Read Parquet file directly from S3"""
+    key = s3_path.replace(f's3://{BUCKET_NAME}/', '')
+    
+    # Download to buffer
+    buffer = BytesIO()
+    s3_client.download_fileobj(BUCKET_NAME, key, buffer)
+    
+    # Read Parquet
+    buffer.seek(0)
+    df = pd.read_parquet(buffer)
+    
+    return df
+
+# === LIST FILES IN S3 ===
+def list_s3_files(prefix):
+    """List all files in S3 with given prefix"""
+    response = s3_client.list_objects_v2(
+        Bucket=BUCKET_NAME,
+        Prefix=prefix
+    )
+    
+    files = [obj['Key'] for obj in response.get('Contents', [])]
+    return [f's3://{BUCKET_NAME}/{f}' for f in files]
+
+# === EXAMPLE USAGE ===
+# List all FCS files
+fcs_files = list_s3_files('raw_data/nanofacs/')
+# ['s3://.../P5_F10_ISO.fcs', 's3://.../P5_F10_CD81_0.25ug.fcs', ...]
+
+# Process each file
+for fcs_s3_path in fcs_files:
+    meta, events = read_fcs_from_s3(fcs_s3_path)
+    stats = calculate_statistics(events)
+    # ... continue processing
+```
+
+### **Benefits of S3 Storage:**
+
+1. **Centralized Storage:** All team members access same data
+2. **Versioning:** Can enable S3 versioning for data history
+3. **Scalability:** No local storage limits
+4. **Security:** IAM roles, encryption at rest
+5. **Backup:** Automatic replication, disaster recovery
+6. **Cost:** Pay only for what you use (~$0.023/GB/month)
+
+### **Performance Considerations:**
+
+- **Download Time:** ~2-3 seconds per 12MB FCS file (from US servers)
+- **Upload Time:** ~1-2 seconds per Parquet file (<1MB)
+- **Caching Strategy:** Download to `/tmp/` during processing, delete after
+- **Parallel Processing:** Can download multiple files concurrently with threading
+
+---
+
+## 🔬 **Baseline + Iterations Workflow** ⭐ **NEW - Nov 13, 2025**
+
+### **Discovery:** How Scientists Actually Use the System
+
+During meeting, learned the **ACTUAL experimental workflow**:
+
+```
+EXPERIMENT DESIGN:
+1. Take ONE biological sample (e.g., Passage 5, Fraction 10 exosomes)
+2. Run it FIRST with isotype control (ISO) → BASELINE
+3. Run SAME sample multiple times with different antibodies → ITERATIONS
+4. Compare each test run to the baseline
+
+RESULT: 5-6 FCS files for ONE biological sample
+```
+
+### **Example Workflow:**
+
+```
+BIOLOGICAL SAMPLE: Passage 5, Fraction 10 exosomes (purified via SEC)
+
+RUN 1 (Baseline):
+├─ Sample: P5_F10 + Isotype antibody (negative control)
+├─ File: "Exo+ ISO SEC.fcs"
+├─ measurement_id: "P5_F10_ISO"
+├─ Purpose: Establish background fluorescence
+└─ Result: 5% positive (background noise)
+
+RUN 2 (Test - Low Dose):
+├─ Sample: SAME P5_F10 + CD81 antibody (0.25 µg)
+├─ File: "Exo+ 0.25ug CD81 SEC.fcs"
+├─ measurement_id: "P5_F10_CD81_0.25ug"
+├─ Purpose: Test specific CD81 marker expression
+└─ Result: 25% positive → +20% vs baseline
+
+RUN 3 (Test - Medium Dose):
+├─ Sample: SAME P5_F10 + CD81 antibody (1.0 µg)
+├─ File: "Exo+ 1ug CD81 SEC.fcs"
+├─ measurement_id: "P5_F10_CD81_1ug"
+├─ Purpose: Test dose response
+└─ Result: 45% positive → +40% vs baseline
+
+RUN 4 (Test - High Dose):
+├─ Sample: SAME P5_F10 + CD81 antibody (2.0 µg)
+├─ File: "Exo+ 2ug CD81 SEC.fcs"
+├─ measurement_id: "P5_F10_CD81_2ug"
+├─ Purpose: Test saturation
+└─ Result: 60% positive → +55% vs baseline
+
+RUN 5-6 (Other Markers):
+├─ Sample: SAME P5_F10 + CD9 antibody
+├─ Sample: SAME P5_F10 + CD63 antibody
+└─ Purpose: Test multiple markers on same sample
+
+ALL LINKED BY: biological_sample_id = "P5_F10"
+```
+
+### **Data Model to Support This:**
+
+**1. Two-Level Identification System:**
+
+```python
+# LEVEL 1: Biological Sample (groups all iterations)
+biological_sample_id = "P5_F10"  # Passage 5, Fraction 10
+
+# LEVEL 2: Individual Measurement (one per FCS file)
+measurement_id = "P5_F10_CD81_0.25ug"  # Specific run
+```
+
+**2. Baseline Linking:**
+
+```python
+# Every test measurement links to its baseline
+baseline_measurement_id = "P5_F10_ISO"  # Reference for comparison
+```
+
+**3. Iteration Tracking:**
+
+```python
+iteration_number = 2  # 1=baseline, 2-6=tests
+```
+
+### **Comparison Calculations:**
+
+```python
+def calculate_baseline_delta(test_measurement_id, baseline_measurement_id):
+    # Load test and baseline statistics
+    test = event_stats[event_stats['measurement_id'] == test_measurement_id].iloc[0]
+    baseline = event_stats[event_stats['measurement_id'] == baseline_measurement_id].iloc[0]
+    
+    # Calculate deltas
+    delta_pct_positive = test['pct_marker_positive'] - baseline['pct_marker_positive']
+    # 45% - 5% = +40%
+    
+    fold_change = test['pct_marker_positive'] / baseline['pct_marker_positive']
+    # 45 / 5 = 9x increase
+    
+    delta_mfi = test['mean_fluorescence_intensity'] - baseline['mean_fluorescence_intensity']
+    # 1250 - 350 = +900
+    
+    return {
+        'delta_pct_positive': delta_pct_positive,
+        'fold_change_positive': fold_change,
+        'delta_mfi': delta_mfi,
+        'is_significant': delta_pct_positive > 10.0  # Threshold
+    }
+```
+
+### **Queries Scientists Need:**
+
+**Q1:** "Show me all CD81 test runs for Passage 5 samples"
+```python
+cd81_tests = sample_metadata[
+    (sample_metadata['antibody'] == 'CD81') &
+    (sample_metadata['passage'] == 'P5') &
+    (sample_metadata['is_baseline'] == False)
+]
+```
+
+**Q2:** "Which samples showed strong response to CD81?"
+```python
+strong_response = baseline_comparison[
+    (baseline_comparison['antibody_tested'] == 'CD81') &
+    (baseline_comparison['delta_pct_positive'] > 30)
+]
+```
+
+**Q3:** "Compare all iterations of biological sample P5_F10"
+```python
+p5_f10_iterations = sample_metadata[
+    sample_metadata['biological_sample_id'] == 'P5_F10'
+].sort_values('iteration_number')
+
+# Show progression: baseline → test1 → test2 → ...
+```
+
+**Q4:** "Is there a dose-response relationship for CD81?"
+```python
+dose_response = baseline_comparison[
+    (baseline_comparison['biological_sample_id'] == 'P5_F10') &
+    (baseline_comparison['antibody_tested'] == 'CD81')
+].sort_values('antibody_concentration_ug')
+
+# Plot: concentration vs delta_pct_positive
+# Expected: Increasing curve, then saturation
+```
+
+### **Implementation Impact:**
+
+**Task 1.1 (FCS Parser) - ENHANCED:**
+- Parse biological_sample_id from filename
+- Detect baseline vs test (check for "ISO", "Isotype")
+- Generate measurement_id with antibody + concentration
+- Link test runs to baseline
+
+**Task 1.3 (Data Integration) - NEW MODULE:**
+- Group by biological_sample_id
+- Identify baseline (is_baseline=True)
+- Calculate deltas for all test measurements
+- Generate baseline_comparison.parquet
+
+**Timeline Impact:** +3-5 days for baseline comparison logic
+
+---
