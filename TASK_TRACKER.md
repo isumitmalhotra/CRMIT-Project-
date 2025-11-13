@@ -1083,21 +1083,362 @@ Create comprehensive documentation and training materials.
 
 ## 📅 Timeline & Milestones
 
-### Milestone 1: Data Processing Foundation
-**Target Date:** Week 3-4  
-**Criteria:**
-- [ ] FCS parser completed and tested
-- [ ] NTA parser completed and tested
-- [ ] Data integration functional
-- [ ] All raw data successfully processed
+### 🚨 **PROJECT DEADLINE: Mid-January 2025**
 
-### Milestone 2: Analysis & Insights
-**Target Date:** Week 7-8  
-**Criteria:**
-- [ ] EDA completed with comprehensive report
-- [ ] QC module implemented and validated
-- [ ] Dashboard functional and deployed
-- [ ] Initial findings presented to client
+**Total Duration:** 10-12 weeks (Nov 13, 2025 - Jan 31, 2025)  
+**Scope:** Phase 1 only - nanoFACS + NTA integration  
+**Deferred:** TEM, Western Blot, Full Web Dashboard (Phase 2)
+
+---
+
+### **WEEK 1-2: Setup & Planning (Nov 13-26, 2025)**
+
+**Sprint Goal:** Environment setup and detailed implementation planning
+
+**Tasks:**
+- [x] ✅ Complete CRMIT architecture analysis
+- [x] ✅ Create comprehensive documentation (3 major docs)
+- [x] ✅ Confirm scope with client (nanoFACS + NTA only)
+- [ ] Install all dependencies
+  ```bash
+  pip install fcsparser pandas numpy pyarrow dask memory_profiler
+  pip install scikit-learn matplotlib seaborn plotly
+  ```
+- [ ] Test Parquet conversion with test.csv
+  - Verify 55 MB → 12 MB compression
+  - Benchmark load speed (CSV vs Parquet)
+- [ ] Design detailed Task 1.1 implementation
+  - Finalize chunked processing strategy
+  - Define event_statistics schema
+  - Plan sample_id generation logic
+- [ ] Set up development environment
+  - Python virtual environment
+  - Git workflow (feature branches)
+  - Testing framework (pytest)
+
+**Deliverables:**
+- [ ] Environment ready with all dependencies installed
+- [ ] Parquet conversion validated on test data
+- [ ] Detailed Task 1.1 implementation plan documented
+- [ ] Unit test framework set up
+
+**Success Criteria:**
+- ✅ Can convert test.csv to Parquet successfully
+- ✅ Memory profiler working
+- ✅ Detailed week-by-week plan for Task 1.1
+
+**Checkpoint:** Nov 26 - Review progress, adjust plan if needed
+
+---
+
+### **WEEK 3-4: FCS Parser Core (Nov 27 - Dec 10, 2025)**
+
+**Sprint Goal:** Implement core FCS parsing with basic Parquet output
+
+**Tasks:**
+- [ ] Implement FCS file reader using fcsparser
+  - Parse metadata (sample name, instrument, date)
+  - Extract all 26 parameters (FSC, SSC, fluorescence)
+  - Handle parsing errors gracefully
+- [ ] Implement chunked processing
+  - Read 50,000 events per chunk
+  - Process chunks sequentially
+  - Explicit garbage collection after each chunk
+- [ ] Implement sample_id generation
+  - Parse filename patterns (L5+F10+CD81 → P5_F10_CD81)
+  - Fallback to metadata extraction
+  - Handle edge cases (inconsistent naming)
+- [ ] Basic Parquet output
+  - Save events to .parquet files (one per FCS file)
+  - Verify compression (target: 12 MB vs 55 MB CSV)
+  - Test with 5-10 sample files
+
+**Deliverables:**
+- [ ] `scripts/parse_fcs.py` - Core parser (v1)
+- [ ] Successfully parse 10 test FCS files
+- [ ] Events saved as Parquet (verified compression)
+- [ ] Unit tests for parser functions
+
+**Success Criteria:**
+- ✅ All 10 test files parse without errors
+- ✅ Parquet files 70-80% smaller than CSV equivalent
+- ✅ Memory usage <4 GB during processing
+
+**Checkpoint:** Dec 10 - Demo working parser on sample files
+
+---
+
+### **WEEK 5-6: FCS Parser Enhancement (Dec 11-24, 2025)**
+
+**Sprint Goal:** Add statistics calculation, quality validation, batch processing
+
+**Tasks:**
+- [ ] Implement event_statistics pre-calculation
+  - Calculate mean, median, std for all 26 parameters
+  - Calculate percentiles (P10, P25, P50, P75, P90)
+  - Save to event_statistics.parquet (one row per file)
+- [ ] Implement quality validation
+  - Check event count (>1000 minimum)
+  - Validate all 26 parameters present
+  - Detect data corruption (outliers, NaN values)
+  - Generate quality_report.parquet with flags
+- [ ] Implement batch processing
+  - Recursive directory scanning
+  - Progress bar (tqdm) for user feedback
+  - Error logging (which files failed, why)
+  - Processing summary report
+- [ ] Implement sample_metadata registry
+  - Extract passage, fraction, antibody from filenames
+  - Parse metadata fields from FCS headers
+  - Save to sample_metadata.parquet
+- [ ] Performance optimization
+  - Profile with memory_profiler
+  - Optimize chunk size if needed
+  - Test parallel processing (optional)
+
+**Deliverables:**
+- [ ] `scripts/batch_fcs_parser.py` - Complete parser with all features
+- [ ] Process all 70 FCS files successfully
+- [ ] `processed_data/measurements/nanofacs/events/*.parquet` (70 files, ~840 MB total)
+- [ ] `processed_data/measurements/nanofacs/statistics/event_statistics.parquet` (70 rows)
+- [ ] `processed_data/samples/sample_metadata.parquet` (partial - nanoFACS samples)
+- [ ] `logs/fcs_processing_log.csv` - Processing report
+
+**Success Criteria:**
+- ✅ All 70 FCS files processed successfully
+- ✅ Processing speed >5 files/minute
+- ✅ Memory usage <4 GB peak
+- ✅ event_statistics.parquet loads in <1 second
+
+**Checkpoint:** Dec 24 - Task 1.1 COMPLETE, ready for holiday break
+
+---
+
+### **WEEK 7-8: NTA Parser Core (Dec 25, 2025 - Jan 7, 2026)**
+
+**Sprint Goal:** Implement NTA text file parser with size distribution analysis
+
+**Tasks:**
+- [ ] Analyze ZetaView .txt file format
+  - Understand file structure
+  - Identify metadata section (temperature, pH, conductivity)
+  - Identify size distribution data section
+- [ ] Implement text file parser
+  - Extract metadata (temperature, pH, conductivity, instrument settings)
+  - Parse size distribution tables
+  - Handle multiple measurement positions (11 positions typical)
+- [ ] Calculate NTA statistics
+  - D10, D50, D90 (size percentiles)
+  - Mean size, mode size, standard deviation
+  - Concentration (particles/mL)
+  - CV (coefficient of variation)
+- [ ] Implement size binning (CRMIT requirement)
+  - Count particles in 40-80nm range
+  - Count particles in 80-100nm range
+  - Count particles in 100-120nm range
+  - Calculate percentages per bin
+- [ ] Calculate uniformity score
+  - (D90 - D10) / D50 (lower = more uniform)
+  - Position CV (variability across 11 positions)
+- [ ] Quality validation
+  - Check temperature compliance (20-30°C expected)
+  - Validate concentration CV (<20% good)
+  - Flag position drift (CV >15%)
+
+**Deliverables:**
+- [ ] `scripts/parse_nta.py` - NTA parser
+- [ ] Parse all NTA .txt files (multiple experiments)
+- [ ] `processed_data/measurements/nta/distributions/*.csv` - Size histograms
+- [ ] `processed_data/measurements/nta/summary/nta_statistics.parquet` - Summary stats
+
+**Success Criteria:**
+- ✅ All NTA files parsed successfully
+- ✅ Size binning matches CRMIT specs (40-80, 80-100, 100-120nm)
+- ✅ Temperature/pH extracted and validated
+
+**Checkpoint:** Jan 7 - Review NTA parser, test edge cases
+
+---
+
+### **WEEK 9: NTA Enhancement & Integration Prep (Jan 8-14, 2026)**
+
+**Sprint Goal:** Complete NTA parser and prepare for integration
+
+**Tasks:**
+- [ ] Enhance NTA parser
+  - Add batch processing for multiple files
+  - Generate processing logs
+  - Error handling for malformed files
+- [ ] Update sample_metadata registry
+  - Extract sample identifiers from NTA filenames
+  - Append NTA samples to sample_metadata.parquet
+  - Handle samples present in both nanoFACS and NTA
+- [ ] Validate NTA output
+  - Cross-check statistics manually vs parser output
+  - Verify size bins add up correctly
+  - Test on edge cases (single position, missing data)
+- [ ] Prepare for integration
+  - Review sample_id matching logic
+  - Identify samples with both nanoFACS + NTA data
+  - Identify orphaned samples (only one instrument)
+
+**Deliverables:**
+- [ ] `scripts/batch_nta_parser.py` - Complete NTA parser
+- [ ] Updated `processed_data/samples/sample_metadata.parquet` (both instruments)
+- [ ] `processed_data/measurements/nta/summary/nta_statistics.parquet` - Final
+
+**Success Criteria:**
+- ✅ Task 1.2 COMPLETE
+- ✅ All NTA data processed and validated
+- ✅ sample_metadata has all samples from both instruments
+
+**Checkpoint:** Jan 14 - Task 1.2 COMPLETE, ready for integration
+
+---
+
+### **WEEK 10-11: Data Integration (Jan 15-28, 2026)**
+
+**Sprint Goal:** Create unified dataset merging nanoFACS + NTA
+
+**Tasks:**
+- [ ] Implement sample matching
+  - Match nanoFACS and NTA samples by sample_id
+  - Handle partial matches (passage/fraction based)
+  - Fuzzy matching for inconsistent naming
+- [ ] Merge statistics
+  - Load event_statistics.parquet (nanoFACS)
+  - Load nta_statistics.parquet (NTA)
+  - Outer join on sample_id (keep all samples)
+- [ ] Rename columns with prefixes
+  - nanoFACS columns: 'facs_mean_FSC', 'facs_pct_debris', etc.
+  - NTA columns: 'nta_D50_nm', 'nta_concentration', etc.
+- [ ] Calculate derived features
+  - size_correlation: correlation between facs_mean_FSC and nta_D50_nm
+  - purity_score: combined metric from both instruments
+  - quality_flags: automated quality assessment
+- [ ] Generate combined_features.parquet
+  - ~70 rows (samples) × ~350 columns (features)
+  - Include metadata columns (sample_id, passage, fraction, etc.)
+  - Include all nanoFACS features (~300 columns)
+  - Include all NTA features (~50 columns)
+- [ ] Handle missing data
+  - Samples with only nanoFACS: NTA columns = NaN
+  - Samples with only NTA: nanoFACS columns = NaN
+  - Flag completeness in quality report
+- [ ] Generate quality reports
+  - Sample inventory (which samples have which data)
+  - Data completeness report
+  - Cross-validation report (FSC vs D50 correlation)
+
+**Deliverables:**
+- [ ] `scripts/create_integrated_dataset.py` - Integration script
+- [ ] `unified_data/samples/sample_metadata.parquet` - Complete registry
+- [ ] `unified_data/integrated/combined_features.parquet` - ML-ready dataset
+- [ ] `unified_data/integrated/quality_labels.parquet` - Quality assessments
+- [ ] `unified_data/integrated/correlation_analysis.parquet` - Cross-machine metrics
+- [ ] `reports/sample_inventory.csv` - Which samples have which data
+- [ ] `reports/data_quality_report.html` - Comprehensive quality report
+
+**Success Criteria:**
+- ✅ All samples linked by sample_id
+- ✅ combined_features.parquet has expected schema (~350 columns)
+- ✅ No data integrity issues (types, ranges validated)
+- ✅ Can load combined_features.parquet directly into pandas/sklearn
+
+**Checkpoint:** Jan 28 - Task 1.3 COMPLETE, Phase 1 feature-complete
+
+---
+
+### **WEEK 12: Testing, Documentation & Delivery (Jan 29 - Feb 4, 2026)**
+
+**Sprint Goal:** Final testing, documentation, and Phase 1 delivery
+
+**Tasks:**
+- [ ] Comprehensive testing
+  - Re-run entire pipeline (Task 1.1 → 1.2 → 1.3)
+  - Verify all outputs generated correctly
+  - Test edge cases (missing files, corrupted data)
+  - Performance benchmarks (speed, memory)
+- [ ] Code cleanup
+  - Add docstrings to all functions
+  - Remove debug code
+  - Code formatting (black, pylint)
+  - Final code review
+- [ ] Documentation
+  - Update README.md with installation instructions
+  - Create USER_GUIDE.md for running parsers
+  - Document output schemas (DATA_SCHEMA.md)
+  - Create troubleshooting guide
+- [ ] Delivery package
+  - Zip all processed data
+  - Create requirements.txt
+  - Write deployment instructions
+  - Create demo notebook showing data usage
+- [ ] Final presentation
+  - Create results summary (statistics, findings)
+  - Generate sample visualizations
+  - Prepare demo for stakeholders
+  - Document Phase 2 recommendations
+
+**Deliverables:**
+- [ ] Complete Phase 1 codebase (clean, documented)
+- [ ] All documentation updated
+- [ ] `demo/phase1_results_demo.ipynb` - Jupyter notebook demo
+- [ ] `deliverables/phase1_data_package.zip` - All processed data
+- [ ] `docs/DEPLOYMENT_GUIDE.md` - How to run the pipeline
+- [ ] Phase 1 completion report
+
+**Success Criteria:**
+- ✅ Pipeline runs end-to-end without errors
+- ✅ All deliverables packaged and ready
+- ✅ Documentation complete and clear
+- ✅ Demo ready for stakeholder presentation
+
+**🎉 FINAL CHECKPOINT: Feb 4 - PHASE 1 DELIVERY COMPLETE**
+
+---
+
+### Milestone Summary
+
+| Milestone | Target Date | Status | Criteria |
+|-----------|-------------|--------|----------|
+| **M1: Environment Setup** | Nov 26, 2025 | ⏳ Pending | Dependencies installed, Parquet tested |
+| **M2: FCS Parser Core** | Dec 10, 2025 | ⏳ Pending | Parse 10 files successfully |
+| **M3: FCS Parser Complete** | Dec 24, 2025 | ⏳ Pending | All 70 files processed, Task 1.1 done |
+| **M4: NTA Parser Core** | Jan 7, 2026 | ⏳ Pending | NTA parsing working, size bins implemented |
+| **M5: NTA Parser Complete** | Jan 14, 2026 | ⏳ Pending | All NTA files processed, Task 1.2 done |
+| **M6: Data Integration** | Jan 28, 2026 | ⏳ Pending | combined_features.parquet created, Task 1.3 done |
+| **M7: Phase 1 Delivery** | Feb 4, 2026 | ⏳ Pending | Complete package delivered |
+
+---
+
+### Risk Mitigation Timeline
+
+**Potential Delays & Buffer:**
+- Week 3-6 (Task 1.1): If FCS parsing takes longer → Use Week 7 as buffer
+- Week 7-9 (Task 1.2): If NTA parsing challenging → Extend to Week 10
+- Week 10-11 (Task 1.3): Critical path - cannot slip, relatively straightforward
+- Week 12: Buffer week for unexpected issues
+
+**Contingency Plan:**
+- If Week 6 and still not done with Task 1.1 → Reassess, possibly simplify scope
+- If Week 9 and Task 1.2 incomplete → Extend deadline by 1 week, push to mid-February
+- Weekly check-ins every Friday to catch delays early
+
+---
+
+### Weekly Check-in Template
+
+**Every Friday:**
+- What was completed this week?
+- Any blockers encountered?
+- On track for next milestone? (Yes/No/At Risk)
+- Adjustments needed?
+
+**Escalation Triggers:**
+- >2 days behind schedule → Flag immediately
+- Technical blocker unresolved after 1 day → Ask for help
+- Scope creep detected → Document and defer to Phase 2
 
 ### Milestone 3: Advanced Features
 **Target Date:** Week 10-11  
