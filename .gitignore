@@ -77,3 +77,8 @@ docs/_templates/
 
 # OS
 Thumbs.db
+
+# Temporary Office files
+~$*.pptx
+~$*.docx
+~$*.xlsx
