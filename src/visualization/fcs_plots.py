@@ -161,6 +161,148 @@ class FCSPlotter:
         
         return fig
     
+    def plot_histogram(
+        self,
+        data: pd.DataFrame,
+        channel: str,
+        title: Optional[str] = None,
+        output_file: Optional[Path | str] = None,
+        bins: int = 256,
+        log_scale: bool = True,
+        gate_threshold: Optional[float] = None,
+        show_stats: bool = True,
+        color: str = 'steelblue'
+    ) -> plt.Figure:
+        """
+        Create 1D histogram for fluorescence intensity analysis.
+        
+        Shows marker expression (CD63, CD81, CD9, etc.) for:
+        - Determining % positive events
+        - Comparing conditions
+        - Quality control
+        
+        Args:
+            data: DataFrame containing FCS event data
+            channel: Column name for channel (e.g., 'V450-50-A' for CD81)
+            title: Plot title (auto-generated if None)
+            output_file: Path to save plot (auto-generated if None)
+            bins: Number of histogram bins
+            log_scale: Use log scale for Y-axis
+            gate_threshold: Threshold for positive/negative gating (optional)
+            show_stats: Show statistics (mean, median, % positive)
+            color: Histogram color
+            
+        Returns:
+            matplotlib Figure object
+        """
+        # Validate channel exists
+        if channel not in data.columns:
+            raise ValueError(f"Channel '{channel}' not found in data")
+        
+        # Get channel data
+        channel_data = data[channel].dropna()
+        
+        if len(channel_data) == 0:
+            raise ValueError(f"No valid data in channel '{channel}'")
+        
+        # Create figure
+        fig, ax = plt.subplots(figsize=(10, 6))
+        
+        # Plot histogram
+        counts, bins_edges, patches = ax.hist(
+            channel_data, 
+            bins=bins, 
+            alpha=0.7, 
+            color=color,
+            edgecolor='black',
+            linewidth=0.5
+        )
+        
+        # Apply log scale if requested
+        if log_scale:
+            ax.set_yscale('log')
+            ax.set_ylabel('Count (log scale)', fontsize=12, fontweight='bold')
+        else:
+            ax.set_ylabel('Count', fontsize=12, fontweight='bold')
+        
+        # Set labels
+        ax.set_xlabel(f'{channel} Intensity', fontsize=12, fontweight='bold')
+        
+        # Auto-generate title if not provided
+        if title is None:
+            sample_id = data['sample_id'].iloc[0] if 'sample_id' in data.columns and len(data) > 0 else 'Unknown' if 'sample_id' in data.columns else 'Unknown'
+            title = f'Fluorescence Histogram: {channel}\nSample: {sample_id}'
+        
+        ax.set_title(title, fontsize=14, fontweight='bold', pad=20)
+        
+        # Add gate threshold line
+        if gate_threshold is not None:
+            ax.axvline(
+                gate_threshold, 
+                color='red', 
+                linestyle='--', 
+                linewidth=2,
+                label=f'Gate: {gate_threshold:.0f}'
+            )
+            
+            # Calculate % positive
+            percent_positive = (channel_data > gate_threshold).sum() / len(channel_data) * 100
+            
+            # Add text annotation
+            ax.text(
+                0.95, 0.95,
+                f'Positive: {percent_positive:.1f}%',
+                transform=ax.transAxes,
+                fontsize=11,
+                verticalalignment='top',
+                horizontalalignment='right',
+                bbox=dict(boxstyle='round', facecolor='white', alpha=0.8, edgecolor='red')
+            )
+        
+        # Add statistics
+        if show_stats:
+            mean_val = channel_data.mean()
+            median_val = channel_data.median()
+            
+            # Add vertical lines
+            ax.axvline(mean_val, color='red', linestyle='--', linewidth=1.5, alpha=0.7, label=f'Mean: {mean_val:.0f}')
+            ax.axvline(median_val, color='green', linestyle='--', linewidth=1.5, alpha=0.7, label=f'Median: {median_val:.0f}')
+            
+            # Add statistics text box
+            stats_text = f'Events: {len(channel_data):,}\n'
+            stats_text += f'Mean: {mean_val:.1f}\n'
+            stats_text += f'Median: {median_val:.1f}\n'
+            stats_text += f'Min: {channel_data.min():.1f}\n'
+            stats_text += f'Max: {channel_data.max():.1f}'
+            
+            ax.text(
+                0.02, 0.98,
+                stats_text,
+                transform=ax.transAxes,
+                fontsize=9,
+                verticalalignment='top',
+                fontfamily='monospace',
+                bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8)
+            )
+        
+        # Add legend
+        ax.legend(loc='upper right', fontsize=10)
+        
+        # Grid
+        ax.grid(True, alpha=0.3, which='both')
+        
+        # Tight layout
+        plt.tight_layout()
+        
+        # Save if output_file provided
+        if output_file:
+            output_path = self.output_dir / output_file
+            fig.savefig(output_path, dpi=300, bbox_inches='tight')
+            logger.info(f"Saved histogram: {output_path}")
+            plt.close(fig)  # Close figure to free memory
+        
+        return fig
+    
     def plot_fsc_ssc(
         self,
         data: pd.DataFrame,
@@ -262,6 +404,148 @@ class FCSPlotter:
             figures.append(fig)
         
         return figures
+    
+    def plot_marker_histograms(
+        self,
+        data: pd.DataFrame,
+        marker_channels: Optional[List[str]] = None,
+        output_file: Optional[Path | str] = None,
+        bins: int = 256,
+        log_scale: bool = True,
+        gate_thresholds: Optional[dict] = None
+    ) -> plt.Figure:
+        """
+        Create multi-panel histogram plot for marker comparison.
+        
+        Shows CD63, CD81, CD9 or other markers side-by-side for:
+        - Marker expression comparison
+        - Quality control
+        - Condition comparison
+        
+        Args:
+            data: DataFrame containing FCS event data
+            marker_channels: List of fluorescence channels to plot
+                            (auto-detect if None)
+            output_file: Path to save plot
+            bins: Number of histogram bins
+            log_scale: Use log scale for Y-axis
+            gate_thresholds: Dict mapping channel names to threshold values
+            
+        Returns:
+            matplotlib Figure object
+        """
+        # Auto-detect fluorescence channels if not provided
+        if marker_channels is None:
+            # Look for fluorescence channels (V, B, Y, R prefixes with numbers)
+            marker_channels = [
+                col for col in data.columns 
+                if col.startswith(('V4', 'B5', 'Y5', 'R6', 'R7'))
+                and col.endswith('-A')
+            ]
+        
+        if not marker_channels:
+            logger.warning("No fluorescence marker channels found")
+            return None
+        
+        # Limit to first 4 channels for clean layout
+        marker_channels = marker_channels[:4]
+        n_markers = len(marker_channels)
+        
+        # Create subplots
+        fig, axes = plt.subplots(1, n_markers, figsize=(5*n_markers, 5))
+        
+        # Handle single channel case
+        if n_markers == 1:
+            axes = [axes]
+        
+        # Get sample ID
+        sample_id = data['sample_id'].iloc[0] if 'sample_id' in data.columns and len(data) > 0 else 'Unknown' if 'sample_id' in data.columns else 'Unknown'
+        
+        # Define colors for each marker
+        colors = ['steelblue', 'coral', 'mediumseagreen', 'orchid']
+        
+        # Plot each marker
+        for idx, (channel, ax, color) in enumerate(zip(marker_channels, axes, colors)):
+            channel_data = data[channel].dropna()
+            
+            if len(channel_data) == 0:
+                ax.text(0.5, 0.5, 'No data', ha='center', va='center', transform=ax.transAxes)
+                continue
+            
+            # Plot histogram
+            counts, bins_edges, patches = ax.hist(
+                channel_data, 
+                bins=bins, 
+                alpha=0.7, 
+                color=color,
+                edgecolor='black',
+                linewidth=0.5
+            )
+            
+            # Apply log scale
+            if log_scale:
+                ax.set_yscale('log')
+                ax.set_ylabel('Count (log)' if idx == 0 else '', fontsize=11)
+            else:
+                ax.set_ylabel('Count' if idx == 0 else '', fontsize=11)
+            
+            # Set labels
+            ax.set_xlabel(f'{channel}', fontsize=11, fontweight='bold')
+            ax.set_title(f'Marker {idx+1}', fontsize=12, fontweight='bold')
+            
+            # Add gate threshold if provided
+            if gate_thresholds and channel in gate_thresholds:
+                threshold = gate_thresholds[channel]
+                ax.axvline(threshold, color='red', linestyle='--', linewidth=2)
+                
+                # Calculate % positive
+                percent_positive = (channel_data > threshold).sum() / len(channel_data) * 100
+                ax.text(
+                    0.95, 0.95,
+                    f'{percent_positive:.1f}%+',
+                    transform=ax.transAxes,
+                    fontsize=10,
+                    verticalalignment='top',
+                    horizontalalignment='right',
+                    bbox=dict(boxstyle='round', facecolor='white', alpha=0.8, edgecolor='red')
+                )
+            
+            # Add statistics
+            mean_val = channel_data.mean()
+            median_val = channel_data.median()
+            
+            ax.axvline(mean_val, color='red', linestyle='--', linewidth=1, alpha=0.5)
+            ax.axvline(median_val, color='green', linestyle='--', linewidth=1, alpha=0.5)
+            
+            # Add stats text
+            stats_text = f'n={len(channel_data):,}\nμ={mean_val:.0f}\nM={median_val:.0f}'
+            ax.text(
+                0.02, 0.98,
+                stats_text,
+                transform=ax.transAxes,
+                fontsize=8,
+                verticalalignment='top',
+                fontfamily='monospace',
+                bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.7)
+            )
+            
+            # Grid
+            ax.grid(True, alpha=0.3, which='both')
+        
+        # Overall title
+        fig.suptitle(f'Marker Expression Analysis: {sample_id}', fontsize=14, fontweight='bold', y=0.98)
+        
+        # Tight layout
+        plt.tight_layout(rect=[0, 0, 1, 0.96])
+        
+        # Save if output_file provided
+        if output_file:
+            output_path = self.output_dir / output_file
+            fig.savefig(output_path, dpi=300, bbox_inches='tight')
+            logger.info(f"Saved marker histograms: {output_path}")
+            plt.close(fig)  # Close figure to free memory
+        
+        return fig
     
     def create_summary_plot(
         self,
