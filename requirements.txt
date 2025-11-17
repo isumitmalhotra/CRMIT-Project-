@@ -12,7 +12,7 @@ fcsparser>=0.2.0
 
 # Parquet support
 pyarrow>=10.0.0
-fastparquet>=2023.1.0
+# fastparquet>=2023.1.0  # Optional: Requires C++ Build Tools. PyArrow is recommended and installed.
 
 # AWS S3 integration
 boto3>=1.26.0
