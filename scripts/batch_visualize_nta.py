@@ -31,7 +31,7 @@ def batch_visualize_nta(
     output_dir: Path,
     stats_file: Path,
     plot_types: list = ['size_distribution', 'concentration'],
-    max_dirs: int = None
+    max_dirs: int | None = None
 ):
     """
     Generate visualizations for all processed NTA data.
@@ -88,8 +88,14 @@ def batch_visualize_nta(
             
             # Generate size distribution plot
             if 'size_distribution' in plot_types:
+                # Ensure data is a DataFrame
+                if isinstance(sample_stats, pd.Series):
+                    sample_data = pd.DataFrame([sample_stats])
+                else:
+                    sample_data = sample_stats
+                    
                 dist_path = plotter.plot_size_distribution(
-                    data=sample_stats,
+                    data=sample_data,
                     title=f'Size Distribution - {sample_id}',
                     output_file=Path(f"{sample_id}_size_distribution.png"),
                     show_stats=True

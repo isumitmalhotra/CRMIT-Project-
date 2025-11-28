@@ -87,12 +87,47 @@ class SizeBinning:
         
         Returns:
             NTA data with size bin assignments
+        
+        WHAT THIS DOES:
+        ----------------
+        Takes NTA measurements with percentile size data (D10, D50, D90) and assigns
+        each sample to a size bin category (small, medium, large exosomes).
+        
+        HOW IT WORKS:
+        --------------
+        1. Primary bin assignment uses D50 (median size) as the representative size
+           - Rationale: D50 represents the center of the size distribution
+           - Example: If D50 = 85nm → "medium_80_100nm" bin
+        
+        2. For each size bin, estimates percentage of particles in that range
+           - Uses D10, D50, D90 positions to infer distribution shape
+           - Example: If D50 falls in 80-100nm bin, estimate ~40% of particles there
+        
+        WHY THIS DESIGN:
+        ----------------
+        - NTA outputs percentiles (D10, D50, D90), not individual particle sizes
+        - Must estimate bin percentages from limited percentile information
+        - D50 is most reliable metric (median is robust to outliers)
+        - Full histogram would be ideal but not always available from NTA software
+        
+        EXAMPLE:
+        --------
+        Input NTA data:
+            sample_id  D10  D50  D90
+            Sample1    70   85   105
+        
+        Output with bins:
+            sample_id  size_bin          pct_small_40_80nm  pct_medium_80_100nm
+            Sample1    medium_80_100nm   10.0              40.0
         """
         logger.info("📊 Binning NTA particle sizes...")
         
         nta_binned = nta_data.copy()
         
-        # Assign primary bin based on D50 (median size)
+        # Step 1: Assign primary bin based on D50 (median size)
+        # -------------------------------------------------------
+        # D50 = 50th percentile = median particle size in the distribution
+        # This is the most representative single value for the sample
         if 'D50' in nta_data.columns:
             nta_binned['size_bin'] = nta_data['D50'].apply(self._assign_bin)
         elif 'mean_size' in nta_data.columns:
@@ -129,15 +164,57 @@ class SizeBinning:
         
         Returns:
             FCS data with size bin estimates
+        
+        WHAT THIS DOES:
+        ----------------
+        Assigns FCS samples to size bins based on forward scatter (FSC-A) intensity,
+        which correlates with particle size through Mie scattering theory.
+        
+        HOW IT WORKS:
+        --------------
+        Two modes:
+        
+        A) WITH calibration (preferred):
+           - Uses Mie scatter calibration curve to convert FSC-A → size (nm)
+           - Formula: size_nm = slope * FSC_A + intercept
+           - Then bins by actual calculated size
+           - Example: FSC-A=500 → 85nm → "medium_80_100nm" bin
+        
+        B) WITHOUT calibration (fallback):
+           - Uses FSC-A quartiles as rough size proxies
+           - Lowest 25% FSC → small bin, highest 25% → large bin
+           - Less accurate but provides approximate binning
+        
+        WHY THIS DESIGN:
+        ----------------
+        - FCS doesn't directly measure size (unlike NTA)
+        - FSC-A intensity is proportional to particle cross-sectional area
+        - Mie scattering theory enables FSC-A → size conversion
+        - Calibration curve built from NTA+FCS matched samples
+        - Without calibration, can still do relative size comparisons
+        
+        CALIBRATION CURVE EXAMPLE:
+        --------------------------
+        From validate_fcs_vs_nta.py regression:
+            size_nm = 0.15 * FSC_A + 25.0
+        
+        So: FSC_A=200 → 55nm (small)
+            FSC_A=400 → 85nm (medium)
+            FSC_A=600 → 115nm (large)
         """
         logger.info("📊 Binning FCS data by scatter intensity...")
         
         fcs_binned = fcs_data.copy()
         
+        # Mode A: No calibration - use quartile-based binning
+        # ----------------------------------------------------
+        # This is a ROUGH approximation when calibration unavailable
+        # Lower FSC-A → smaller particles, higher FSC-A → larger particles
         if size_calibration is None:
             logger.warning("No size calibration provided, using FSC-A quartiles as proxy")
             
             # Use quartiles as rough bin boundaries
+            # pd.qcut splits data into equal-sized bins
             if 'FSC-A_mean' in fcs_data.columns:
                 fcs_binned['size_bin'] = pd.qcut(
                     fcs_data['FSC-A_mean'],
@@ -175,6 +252,31 @@ class SizeBinning:
         
         Uses D10, D50, D90 to estimate distribution.
         Note: This is a rough approximation. Full histogram would be more accurate.
+        
+        ESTIMATION STRATEGY:
+        --------------------
+        Since NTA only provides 3 percentile markers (D10, D50, D90), we must estimate
+        the percentage of particles in each size bin.
+        
+        Logic:
+        - If D50 (median) falls in bin → estimate 40% of particles in that bin
+        - If D10 (10th percentile) in bin → estimate 10% in that bin
+        - If D90 (90th percentile) in bin → estimate 10% in that bin
+        - If bin is below D10 → 0% (all particles are larger)
+        - If bin is above D90 → 0% (all particles are smaller)
+        - Otherwise → rough estimate of 20% (bin partially covered)
+        
+        LIMITATIONS:
+        ------------
+        This is a CRUDE approximation because:
+        - Real distributions are continuous, not discrete markers
+        - Assumes symmetric distribution around D50 (not always true)
+        - Doesn't account for distribution shape (normal vs skewed)
+        
+        BETTER APPROACH:
+        ----------------
+        If NTA software exports full size histogram → use actual bin counts
+        Example: NanoSight exports CSV with size bins and particle counts per bin
         """
         d10 = row.get('D10', np.nan)
         d50 = row.get('D50', np.nan)

@@ -29,40 +29,97 @@ def batch_generate_nta_plots(
     limit: int | None = None
 ) -> None:
     """
-    Generate plots for all NTA Parquet files.
+    Generate size distribution plots for all NTA Parquet files.
     
     Args:
         input_dir: Directory containing NTA Parquet files
         output_dir: Directory to save plots
         limit: Maximum number of files to process (None = all)
+    
+    WHAT NTA PLOTS SHOW:
+    --------------------
+    NTA (Nanoparticle Tracking Analysis) plots display:
+    - Size distribution histogram (particle diameter in nm)
+    - Cumulative distribution (D10, D50, D90 percentiles)
+    - Concentration by size bin (particles/mL per size range)
+    
+    NTA vs FCS COMPARISON:
+    ----------------------
+    NTA:
+    - Direct size measurement using light scattering + Brownian motion
+    - Accurate for 30-1000nm particles
+    - Lower throughput (~1000 particles/measurement)
+    - Gold standard for exosome sizing
+    
+    FCS:
+    - Indirect size from FSC intensity (needs calibration)
+    - High throughput (10,000+ particles/second)
+    - Better for marker analysis (fluorescence)
+    
+    TYPICAL NTA OUTPUT:
+    -------------------
+    - Peak size: 80-120nm (exosome range)
+    - D50 (median): ~90nm
+    - D90/D10 ratio: Polydispersity indicator
+    - Concentration: 1e9-1e11 particles/mL
+    
+    HOW IT WORKS:
+    -------------
+    1. Find all .parquet files in NTA directory
+    2. Loop through files with progress bar
+    3. Call generate_nta_plots() for each file
+    4. Save histogram + cumulative distribution
+    5. Count successes and failures
+    6. Report summary
     """
-    # Find all NTA files
+    # Step 1: Find all NTA Parquet files
+    # -----------------------------------
+    # NTA files are stored as .parquet after conversion from CSV
     nta_files = list(input_dir.glob("*.parquet"))
     
+    # Check if directory contains any NTA files
     if not nta_files:
         logger.error(f"No Parquet files found in {input_dir}")
-        return
+        return  # Exit if no files found
     
     logger.info(f"Found {len(nta_files)} NTA files")
     
-    # Limit if specified
+    # Step 2: Limit processing if specified
+    # -------------------------------------
+    # Useful for testing: --limit 5 processes only first 5 files
     if limit:
         nta_files = nta_files[:limit]
         logger.info(f"Processing first {limit} files")
     
-    # Process each file
-    success_count = 0
-    error_count = 0
+    # Step 3: Initialize counters
+    # ---------------------------
+    success_count = 0  # Successfully generated plots
+    error_count = 0    # Failed to generate plots
     
+    # Step 4: Process each NTA file
+    # -----------------------------
+    # tqdm() provides progress bar: [====>  ] 50/100 files
     for nta_file in tqdm(nta_files, desc="Generating NTA plots"):
         try:
+            # Generate plots for this NTA measurement
+            # This creates:
+            # - Size distribution histogram (linear scale)
+            # - Size distribution histogram (log scale)
+            # - Cumulative distribution curve
             generate_nta_plots(nta_file, output_dir=output_dir)
             success_count += 1
+            
         except Exception as e:
+            # Log error but continue with next file
+            # Common errors:
+            # - Invalid data format (corrupted file)
+            # - Missing required columns (size, concentration)
+            # - Zero particles detected (failed measurement)
             logger.error(f"Failed to process {nta_file.name}: {e}")
             error_count += 1
     
-    # Summary
+    # Step 5: Report summary statistics
+    # ---------------------------------
     logger.success(f"✅ Complete! {success_count} files processed, {error_count} errors")
 
 

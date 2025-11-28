@@ -61,7 +61,7 @@ class AnomalyDetector:
         baseline_data: pd.DataFrame,
         x_channel: str = 'FSC-A',
         y_channel: str = 'SSC-A'
-    ) -> Dict[str, any]:
+    ) -> Dict[str, Any]:
         """
         Set baseline distribution for comparison.
         
@@ -111,7 +111,7 @@ class AnomalyDetector:
         y_channel: Optional[str] = None,
         threshold: float = 2.0,
         save_plot: bool = True
-    ) -> Dict[str, any]:
+    ) -> Dict[str, Any]:
         """
         Detect population shift in scatter plot.
         
@@ -173,10 +173,10 @@ class AnomalyDetector:
             'y_shift_mean': y_shift_mean,
             'x_shift_median': x_shift_median,
             'y_shift_median': y_shift_median,
-            'ks_x_statistic': float(ks_x[0]),
-            'ks_x_pvalue': float(ks_x[1]),
-            'ks_y_statistic': float(ks_y[0]),
-            'ks_y_pvalue': float(ks_y[1]),
+            'ks_x_statistic': float(ks_x.statistic),  # type: ignore[attr-defined]
+            'ks_x_pvalue': float(ks_x.pvalue),  # type: ignore[attr-defined]
+            'ks_y_statistic': float(ks_y.statistic),  # type: ignore[attr-defined]
+            'ks_y_pvalue': float(ks_y.pvalue),  # type: ignore[attr-defined]
             'threshold': threshold,
             'n_test_events': len(x_valid)
         }
@@ -318,7 +318,7 @@ class AnomalyDetector:
         baseline_stats: pd.DataFrame,
         threshold_pvalue: float = 0.05,
         save_plot: bool = True
-    ) -> Dict[str, any]:
+    ) -> Dict[str, Any]:
         """
         Detect anomalies in NTA size distribution.
         
@@ -350,8 +350,8 @@ class AnomalyDetector:
         
         # Kolmogorov-Smirnov test
         ks_result = stats.ks_2samp(baseline_sizes, test_sizes)
-        ks_stat = float(ks_result[0])
-        ks_pval = float(ks_result[1])
+        ks_stat = float(ks_result.statistic)  # type: ignore[attr-defined]
+        ks_pval = float(ks_result.pvalue)  # type: ignore[attr-defined]
         
         # Compare D-values
         d_shifts = {}
@@ -388,9 +388,13 @@ class AnomalyDetector:
         test_data: pd.DataFrame,
         x_channel: str,
         y_channel: str,
-        results: Dict[str, any]
+        results: Dict[str, Any]
     ) -> None:
         """Plot scatter shift detection visualization."""
+        if self.baseline is None:
+            logger.warning("Cannot plot shift detection: No baseline set")
+            return
+            
         fig, ax = plt.subplots(figsize=(10, 8))
         
         # Plot baseline (ellipse)
@@ -464,7 +468,7 @@ class AnomalyDetector:
         self,
         test_stats: pd.DataFrame,
         baseline_stats: pd.DataFrame,
-        results: Dict[str, any]
+        results: Dict[str, Any]
     ) -> None:
         """Plot size distribution comparison."""
         fig, ax = plt.subplots(figsize=(12, 6))

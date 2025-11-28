@@ -40,3 +40,27 @@ mypy>=1.0.0
 # Documentation
 sphinx>=5.0.0
 sphinx-rtd-theme>=1.2.0
+
+# FastAPI and Web Framework
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+python-multipart>=0.0.6
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+
+# Database
+sqlalchemy[asyncio]>=2.0.0
+asyncpg>=0.29.0
+alembic>=1.13.0
+psycopg2-binary>=2.9.9
+
+# Logging
+loguru>=0.7.2
+
+# HTTP client for API integration
+requests>=2.31.0
+
+# Streamlit for web UI
+streamlit>=1.30.0
+matplotlib>=3.7.0
+plotly>=5.18.0

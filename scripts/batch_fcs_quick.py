@@ -57,8 +57,8 @@ def main():
             sample_id = fcs_file.stem
             plotter.plot_scatter(
                 data=data,
-                x_channel=fsc,
-                y_channel=ssc,
+                x_channel=str(fsc),
+                y_channel=str(ssc),
                 title=f'{sample_id}',
                 output_file=f"{sample_id}_scatter.png",
                 plot_type="density",

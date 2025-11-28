@@ -77,8 +77,8 @@ def main():
             # Add statistics
             mean_size = df['size_nm'].mean()
             median_size = df['size_nm'].median()
-            ax.axvline(mean_size, color='red', linestyle='--', linewidth=2, label=f'Mean: {mean_size:.1f} nm')
-            ax.axvline(median_size, color='green', linestyle='--', linewidth=2, label=f'Median: {median_size:.1f} nm')
+            ax.axvline(float(mean_size), color='red', linestyle='--', linewidth=2, label=f'Mean: {mean_size:.1f} nm')
+            ax.axvline(float(median_size), color='green', linestyle='--', linewidth=2, label=f'Median: {median_size:.1f} nm')
             ax.legend()
             
             plt.tight_layout()

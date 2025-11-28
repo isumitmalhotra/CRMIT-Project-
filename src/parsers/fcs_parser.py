@@ -161,43 +161,82 @@ class FCSParser(BaseParser):
         - P5_F10_ISO.fcs          -> biological_sample_id: P5_F10, is_baseline: True
         - P5_F10_CD81_0.25ug.fcs  -> biological_sample_id: P5_F10, is_baseline: False
         - Exo+1ug CD81 SEC.fcs    -> biological_sample_id: Exo, is_baseline: False
+        
+        HOW IT WORKS:
+        -------------
+        1. Get filename without extension (.stem removes .fcs)
+        2. Check for baseline keywords (ISO, Isotype, control)
+        3. Try multiple pattern-matching strategies in order of specificity
+        4. Extract biological_sample_id (identifies the biological sample)
+        5. Set measurement_id (unique ID for this specific measurement)
         """
+        # Get filename without .fcs extension
+        # Example: "P5_F10_CD81.fcs" → "P5_F10_CD81"
         filename = self.file_path.stem
         
-        # Detect baseline (isotype control)
+        # Step 1: Detect baseline (isotype control) samples
+        # -----------------------------------------------------
+        # Baselines use non-specific antibodies to measure background
+        # Look for keywords that indicate this is a control sample
         iso_keywords = ['ISO', 'Isotype', 'isotype', 'control']
         self.is_baseline = any(keyword in filename for keyword in iso_keywords)
+        # Example: "P5_F10_ISO.fcs" → is_baseline=True
+        #          "P5_F10_CD81.fcs" → is_baseline=False
         
-        # Try to extract biological sample ID
-        # Pattern 1: P5_F10_... format
+        # Step 2: Try to extract biological sample ID using pattern matching
+        # -------------------------------------------------------------------
+        # Try multiple patterns because different experiments use different naming
+        
+        # Pattern 1: P{passage}_F{fraction}_... format
+        # --------------------------------------------
+        # Example: "P5_F10_CD81.fcs" → P5 (passage 5), F10 (fraction 10)
+        # This format is used for iPSC-derived exosomes
         if filename.startswith('P') and '_F' in filename:
+            # Split by underscore: ["P5", "F10", "CD81"]
             parts = filename.split('_')
             if len(parts) >= 2:
-                self.biological_sample_id = f"{parts[0]}_{parts[1]}"  # P5_F10
+                # Take first two parts: "P5" and "F10"
+                self.biological_sample_id = f"{parts[0]}_{parts[1]}"  # "P5_F10"
+                # Measurement ID includes antibody: "P5_F10_CD81"
                 self.measurement_id = filename
         
-        # Pattern 2: L5+F10+... format (Lot + Fraction)
+        # Pattern 2: L{lot}+F{fraction}+... format
+        # -----------------------------------------
+        # Example: "L5+F10+CD81.fcs" → L5 (lot 5), F10 (fraction 10)
+        # This format uses + separators instead of underscores
         elif 'L' in filename and 'F' in filename and '+' in filename:
+            # Split by +: ["L5", "F10", "CD81"]
             parts = filename.split('+')
             if len(parts) >= 2:
-                lot = parts[0].strip()
-                fraction = parts[1].strip()
+                lot = parts[0].strip()      # "L5"
+                fraction = parts[1].strip()  # "F10"
+                # Combine with underscore for consistency: "L5_F10"
                 self.biological_sample_id = f"{lot}_{fraction}"
                 self.measurement_id = filename
         
-        # Pattern 3: Exo+... format
+        # Pattern 3: Exo+... format (generic exosome samples)
+        # ---------------------------------------------------
+        # Example: "Exo+1ug CD81 SEC.fcs"
+        # Used for exosome samples with antibody concentration and method
         elif filename.startswith('Exo'):
+            # Biological sample is just "Exo" (not specific passage/fraction)
             self.biological_sample_id = 'Exo'
+            # Measurement ID includes full details: antibody + concentration + method
             self.measurement_id = filename
         
-        # Fallback: Use entire filename
+        # Fallback: Use entire filename if no pattern matches
+        # ---------------------------------------------------
+        # For files that don't match known patterns, use full filename
         else:
             self.biological_sample_id = filename
             self.measurement_id = filename
         
-        # Generate unique sample_id (for internal tracking)
+        # Step 3: Generate unique sample_id for internal tracking
+        # --------------------------------------------------------
+        # For now, same as measurement_id (can be made more unique if needed)
         self.sample_id = self.measurement_id
         
+        # Log the extracted identifiers for debugging
         logger.info(f"Extracted IDs: biological={self.biological_sample_id}, "
                    f"measurement={self.measurement_id}, baseline={self.is_baseline}")
     
@@ -287,9 +326,20 @@ class FCSParser(BaseParser):
                 mean_val = series.mean()
                 std_val = series.std()
                 
-                # Cast skewness and kurtosis to handle potential complex numbers
+                # Calculate skewness and kurtosis - handle potential complex numbers
                 skew_val = series.skew()
                 kurt_val = series.kurtosis()
+                
+                # Convert to float, handling complex numbers if they occur
+                if isinstance(skew_val, complex):
+                    skew_float = float(skew_val.real)
+                else:
+                    skew_float = float(skew_val)
+                
+                if isinstance(kurt_val, complex):
+                    kurt_float = float(kurt_val.real)
+                else:
+                    kurt_float = float(kurt_val)
                 
                 stats[col] = {
                     'mean': float(mean_val),
@@ -304,9 +354,9 @@ class FCSParser(BaseParser):
                     'q90': float(series.quantile(0.90)),
                     'q95': float(series.quantile(0.95)),
                     'cv': float(std_val / mean_val) if mean_val != 0 else 0,
-                    'iqr': float(series.quantile(0.75) - series.quantile(0.25)),  # Interquartile range
-                    'skewness': float(np.real(skew_val)),  # Take real part only
-                    'kurtosis': float(np.real(kurt_val)),  # Take real part only
+                    'iqr': float(series.quantile(0.75) - series.quantile(0.25)),
+                    'skewness': skew_float,
+                    'kurtosis': kurt_float,
                 }
         
         # Add overall statistics

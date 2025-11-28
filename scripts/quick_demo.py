@@ -65,8 +65,8 @@ def main():
         logger.info("\n1️⃣ Creating scatter plot (density)...")
         fig1 = plotter.plot_scatter(
             data=data,
-            x_channel=fsc_channel,
-            y_channel=ssc_channel,
+            x_channel=str(fsc_channel),
+            y_channel=str(ssc_channel),
             title=f'Demo Scatter (Density): {test_file.stem}',
             output_file=f"demo_scatter_density_{test_file.stem}.png",
             plot_type="density",
@@ -78,8 +78,8 @@ def main():
         logger.info("\n2️⃣ Creating hexbin plot...")
         fig2 = plotter.plot_scatter(
             data=data,
-            x_channel=fsc_channel,
-            y_channel=ssc_channel,
+            x_channel=str(fsc_channel),
+            y_channel=str(ssc_channel),
             title=f'Demo Scatter (Hexbin): {test_file.stem}',
             output_file=f"demo_scatter_hexbin_{test_file.stem}.png",
             plot_type="hexbin",
@@ -91,7 +91,7 @@ def main():
         logger.info("\n3️⃣ Creating standard FSC-SSC plot...")
         fig3 = plotter.plot_fsc_ssc(
             data=data,
-            output_file=f"demo_fsc_ssc_{test_file.stem}.png",
+            output_file=Path(f"demo_fsc_ssc_{test_file.stem}.png"),
             plot_type="hexbin"
         )
         logger.info(f"   ✅ Saved multi-channel grid")
@@ -102,12 +102,12 @@ def main():
             detector = AnomalyDetector(output_dir=output_dir)
             
             # Set baseline
-            baseline_stats = detector.set_baseline(
+            baseline_info = detector.set_baseline(
                 baseline_data=data,
-                x_channel=fsc_channel,
-                y_channel=ssc_channel
+                x_channel=str(fsc_channel),
+                y_channel=str(ssc_channel)
             )
-            logger.info(f"   ✅ Baseline set: {baseline_stats['n_events']:,} events")
+            logger.info(f"   ✅ Baseline set: {baseline_info.get('n_events', 0):,} events")
             
             # Test with second file
             test_file2 = fcs_files[1]

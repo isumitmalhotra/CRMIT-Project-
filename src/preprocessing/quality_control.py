@@ -52,35 +52,85 @@ class QualityControl:
         
     def check_fcs_quality(self, fcs_data: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """
-        Quality control for FCS data.
+        Quality control for FCS data - validates data integrity and flags suspicious samples.
         
         Args:
             fcs_data: FCS statistics from Task 1.1
         
         Returns:
             Tuple of (passed_data, failed_data)
+        
+        QUALITY CHECKS PERFORMED:
+        -------------------------
+        1. Event count validation (negative/zero counts = instrument error)
+        2. Scatter value validation (FSC/SSC must be positive)
+        3. Coefficient of variation (CV > 100% = high noise or multiple populations)
+        4. Blank detection (very low event counts = possible contamination/failure)
+        
+        QC STATUS VALUES:
+        -----------------
+        - 'pass': Sample meets all quality criteria
+        - 'warn': Sample has minor issues but may be usable
+        - 'fail': Sample fails critical checks, should be excluded
+        
+        WHY THESE CHECKS MATTER:
+        ------------------------
+        - Negative counts: Impossible, indicates data corruption
+        - Zero/negative scatter: Physical impossibility (particles always scatter light)
+        - High CV: Multiple populations, doublets, or instrument drift
+        - Low event counts: Failed acquisition or blank sample
         """
         logger.info("🔍 Running FCS quality control checks...")
         
+        # Create a copy to avoid modifying original data
         fcs_data = fcs_data.copy()
-        fcs_data['qc_status'] = 'pass'
-        fcs_data['qc_flags'] = ''
         
-        # Check 1: Negative event counts
+        # Initialize QC columns
+        # All samples start as 'pass', then we flag failures
+        fcs_data['qc_status'] = 'pass'
+        fcs_data['qc_flags'] = ''  # Semicolon-separated list of failed checks
+        
+        # ============================================================
+        # Check 1: Negative or Zero Event Counts
+        # ============================================================
+        # WHAT: Verify that total_events > 0
+        # WHY: Negative counts are impossible (data corruption)
+        #      Zero counts mean no acquisition (instrument error)
+        # ACTION: Mark as 'fail' - this sample cannot be analyzed
         negative_events = fcs_data['total_events'] <= 0
         fcs_data.loc[negative_events, 'qc_status'] = 'fail'
         fcs_data.loc[negative_events, 'qc_flags'] += 'negative_events;'
         
-        # Check 2: Suspicious scatter values (negative or zero)
+        # ============================================================
+        # Check 2: Invalid Scatter Values
+        # ============================================================
+        # WHAT: Check FSC-A and SSC-A means are positive
+        # WHY: Forward scatter and side scatter must be positive because:
+        #      - All particles scatter light when illuminated
+        #      - Zero/negative = detector failure or data corruption
+        # ACTION: Mark as 'fail' - cannot calculate particle sizes
         for channel in ['FSC-A_mean', 'SSC-A_mean']:
             if channel in fcs_data.columns:
+                # Check for: value <= 0 OR value is NaN (missing)
                 invalid = (fcs_data[channel] <= 0) | (pd.isna(fcs_data[channel]))
                 fcs_data.loc[invalid, 'qc_status'] = 'fail'
                 fcs_data.loc[invalid, 'qc_flags'] += f'{channel}_invalid;'
         
-        # Check 3: Extreme coefficient of variation (> 100%)
+        # ============================================================
+        # Check 3: Extreme Coefficient of Variation (CV)
+        # ============================================================
+        # WHAT: Calculate CV = (std / mean) × 100%
+        # WHY: CV > 100% indicates:
+        #      - Multiple distinct populations (not single EV population)
+        #      - High noise or instrument drift
+        #      - Presence of aggregates or debris
+        # ACTION: Mark as 'warn' - may still be usable with filtering
         if 'FSC-A_std' in fcs_data.columns and 'FSC-A_mean' in fcs_data.columns:
+            # Calculate coefficient of variation for FSC-A
             cv = fcs_data['FSC-A_std'] / fcs_data['FSC-A_mean'] * 100
+            
+            # Flag samples with CV > 100%
+            # Example: mean=1000, std=1200 → CV=120% (very heterogeneous)
             extreme_cv = cv > 100
             fcs_data.loc[extreme_cv, 'qc_status'] = 'warn'
             fcs_data.loc[extreme_cv, 'qc_flags'] += 'extreme_cv;'

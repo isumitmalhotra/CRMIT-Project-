@@ -65,6 +65,48 @@ class NTAPlotter:
             
         Returns:
             matplotlib Figure object
+        
+        WHAT THIS DOES:
+        ----------------
+        Creates a histogram showing the distribution of particle sizes measured by NTA.
+        NTA (Nanoparticle Tracking Analysis) tracks individual particles and measures
+        their Brownian motion to calculate size.
+        
+        HOW IT WORKS:
+        --------------
+        1. Extract particle sizes from 'median_size_nm' column
+           - Each row represents one measurement position
+           - NTA typically takes 5-10 video positions per sample
+        
+        2. Create histogram with 20 bins
+           - Bins particles by size ranges
+           - Color: steelblue, alpha=0.7 for visibility
+        
+        3. Add percentile markers (D10, D50, D90):
+           - D10 (10th percentile): 10% of particles are smaller
+           - D50 (50th percentile = median): half smaller, half larger
+           - D90 (90th percentile): 90% of particles are smaller
+           - These are STANDARD exosome characterization metrics
+        
+        4. Add statistics text box:
+           - Mean size: Average across all particles
+           - Median size: Middle value (D50)
+           - N positions: Number of measurement positions
+        
+        WHY THESE METRICS:
+        ------------------
+        - D10, D50, D90 are standard in exosome research
+        - Recommended by MISEV2018 guidelines (Minimal Information for Studies of EVs)
+        - Percentiles are robust to outliers (unlike mean)
+        - Example interpretation:
+          D10=65nm, D50=85nm, D90=110nm → mostly 65-110nm range
+        
+        EXAMPLE USE CASE:
+        -----------------
+        Quality check: Are particles in expected exosome size range (40-150nm)?
+        - If D50 < 40nm → Too small (protein aggregates?)
+        - If D50 > 150nm → Too large (cell debris? microvesicles?)
+        - If D50 ≈ 80-100nm → Good! Typical exosome range
         """
         fig, ax = plt.subplots(figsize=(10, 6))
         
@@ -216,6 +258,44 @@ class NTAPlotter:
             
         Returns:
             matplotlib Figure object
+        
+        WHAT THIS DOES:
+        ----------------
+        Shows the relationship between particle concentration and size across
+        different measurement positions. Each point is one video position.
+        
+        HOW IT WORKS:
+        --------------
+        1. Scatter plot: median_size_nm (x-axis) vs concentration_particles_ml (y-axis)
+           - Each point = one measurement position
+           - Color-coded by position number (viridis colormap)
+        
+        2. Log scale for concentration (y-axis)
+           - Concentrations span orders of magnitude (10^8 to 10^12 particles/mL)
+           - Log scale makes patterns visible
+        
+        3. Size visualization:
+           - Point size = 100 (large, easy to see)
+           - Edge color = black (distinct boundaries)
+           - Alpha = 0.7 (semi-transparent)
+        
+        WHY THIS IS USEFUL:
+        -------------------
+        Checks for measurement consistency:
+        - Ideal: All positions show similar size + concentration (tight cluster)
+        - Problem: Wide spread indicates sample heterogeneity or measurement issues
+        
+        Example interpretations:
+        - All positions at 80-90nm, 10^10 particles/mL → Homogeneous sample ✅
+        - Position 1: 70nm, Position 5: 120nm → Sample not well-mixed ❌
+        - Some positions: very low concentration → Dilution error or particles settled ❌
+        
+        BIOLOGICAL CONTEXT:
+        -------------------
+        Typical exosome concentrations:
+        - Cell culture supernatant: 10^8 - 10^10 particles/mL
+        - Concentrated prep: 10^11 - 10^12 particles/mL
+        - Plasma/serum: 10^9 - 10^11 particles/mL
         """
         fig, ax = plt.subplots(figsize=(10, 6))
         

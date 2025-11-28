@@ -41,7 +41,7 @@ class DataNormalizer:
         columns: Optional[List[str]] = None
     ) -> pd.DataFrame:
         """
-        Normalize FCS scatter and fluorescence intensities.
+        Normalize FCS scatter and fluorescence intensities for cross-sample comparison.
         
         Args:
             fcs_data: FCS statistics
@@ -49,29 +49,86 @@ class DataNormalizer:
             columns: Specific columns to normalize (default: all numeric)
         
         Returns:
-            Normalized FCS data
+            Normalized FCS data with '_norm' suffix columns added
+        
+        WHY NORMALIZE:
+        --------------
+        Different cytometer runs have variation in:
+        - Laser intensity (day-to-day fluctuation)
+        - PMT voltage settings (changed between experiments)
+        - Sample concentration (dilution differences)
+        - Ambient temperature (affects electronics)
+        
+        Normalization enables:
+        - Comparing samples across different days
+        - Pooling data from multiple experiments
+        - Machine learning (requires same scale)
+        - Statistical testing (assumes similar distributions)
+        
+        NORMALIZATION METHODS:
+        ----------------------
+        1. Z-Score (default): (x - mean) / std
+           - Result: mean=0, std=1
+           - Use: When data is roughly normal distribution
+           - Sensitive to outliers
+        
+        2. Min-Max: (x - min) / (max - min)
+           - Result: range [0, 1]
+           - Use: When need bounded range
+           - Very sensitive to outliers
+        
+        3. Robust: (x - median) / IQR
+           - Result: median=0, IQR=1
+           - Use: When data has outliers
+           - Most robust to extreme values
+        
+        EXAMPLE:
+        --------
+        Original FSC-A_mean values: [1000, 1500, 2000, 2500, 3000]
+        
+        Z-score normalized: [-1.41, -0.71, 0.0, 0.71, 1.41]
+        Min-max normalized: [0.0, 0.25, 0.5, 0.75, 1.0]
+        Robust normalized:  [-1.0, -0.5, 0.0, 0.5, 1.0]
         """
         logger.info(f"🔧 Normalizing FCS data using {method}...")
         
+        # Create copy to avoid modifying original data
         fcs_normalized = fcs_data.copy()
         
-        # Select columns to normalize
+        # Step 1: Select columns to normalize
+        # -----------------------------------
+        # Default: normalize all scatter and fluorescence channels
+        # User can override by specifying specific columns
         if columns is None:
             columns = [
-                'FSC-A_mean', 'FSC-A_median', 'FSC-H_mean',
-                'SSC-A_mean', 'SSC-A_median', 'SSC-H_mean',
-                'FL1-A_mean', 'FL2-A_mean', 'FL3-A_mean'
+                'FSC-A_mean', 'FSC-A_median', 'FSC-H_mean',  # Forward scatter
+                'SSC-A_mean', 'SSC-A_median', 'SSC-H_mean',  # Side scatter
+                'FL1-A_mean', 'FL2-A_mean', 'FL3-A_mean'     # Fluorescence
             ]
+            # Filter to only columns that exist in the data
             columns = [c for c in columns if c in fcs_data.columns]
         
-        # Normalize each column
+        # Step 2: Normalize each column using selected method
+        # ----------------------------------------------------
         for col in columns:
+            # Extract column data as Series
             col_data = pd.Series(fcs_data[col])
+            
+            # Apply normalization method
+            # New column name: original + '_norm' suffix
+            # Example: 'FSC-A_mean' → 'FSC-A_mean_norm'
             if method == 'zscore':
+                # Z-score: (x - mean) / std
+                # Centers data at 0, scales by standard deviation
                 fcs_normalized[f'{col}_norm'] = self._zscore_normalize(col_data)
             elif method == 'minmax':
+                # Min-Max: (x - min) / (max - min)
+                # Scales data to [0, 1] range
                 fcs_normalized[f'{col}_norm'] = self._minmax_normalize(col_data)
             elif method == 'robust':
+                # Robust: (x - median) / IQR
+                # Centers at median, scales by interquartile range
+                # Less sensitive to outliers than z-score
                 fcs_normalized[f'{col}_norm'] = self._robust_normalize(col_data)
             else:
                 raise ValueError(f"Unknown normalization method: {method}")

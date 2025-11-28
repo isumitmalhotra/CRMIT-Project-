@@ -66,7 +66,7 @@ class AutoAxisSelector:
         include_fluorescence: bool = True
     ) -> List[Tuple[str, str, float]]:
         """
-        Select the best channel pairs for visualization.
+        Intelligently select the best channel pairs for scatter plot visualization.
         
         Args:
             data: DataFrame containing FCS event data
@@ -77,68 +77,147 @@ class AutoAxisSelector:
         Returns:
             List of tuples: [(x_channel, y_channel, score), ...]
             Sorted by score (higher is better)
+        
+        HOW IT WORKS:
+        -------------
+        1. Categorize channels (scatter vs fluorescence)
+        2. Calculate metrics for each channel (variance, range, bimodality)
+        3. Generate candidate pairs based on best practices
+        4. Score each pair using multiple criteria
+        5. Return top N pairs sorted by score
+        
+        SCORING CRITERIA:
+        -----------------
+        - Variance: High variance = more information
+        - Dynamic range: Larger range = better separation
+        - Correlation: Low correlation = independent information
+        - Bimodality: Two populations = interesting biology
+        - Best practices: FSC-SSC always recommended
+        
+        CHANNEL PAIR PRIORITY:
+        ----------------------
+        1. FSC vs SSC (standard gating view) - ALWAYS FIRST
+           Score boosted by 1.5x because this is cytometry standard
+        
+        2. Fluorescence vs Scatter (marker positive vs size)
+           Example: CD81 vs FSC ("Are larger EVs CD81 positive?")
+        
+        3. Fluorescence vs Fluorescence (multi-marker analysis)
+           Example: CD81 vs CD9 ("Do CD81+ EVs also have CD9?")
+           Only include if correlation < 0.95 (avoid redundancy)
+        
+        4. Scatter vs Scatter (particle characteristics)
+           Example: FSC-A vs FSC-H (doublet discrimination)
+        
+        EXAMPLE OUTPUT:
+        ---------------
+        [
+            ('VFSC-A', 'VSSC1-A', 0.95, 'Standard gating view'),
+            ('B531-H', 'VFSC-A', 0.78, 'Fluorescence vs Scatter'),
+            ('B531-H', 'R670-H', 0.65, 'Multi-marker analysis'),
+            ('VFSC-A', 'VFSC-H', 0.52, 'Scatter comparison'),
+            ('Y585-H', 'VSSC1-A', 0.48, 'Fluorescence vs Scatter')
+        ]
         """
         logger.info(f"Analyzing {len(data)} events for optimal axis selection...")
         
-        # Sample data if too large
+        # Step 1: Sample data if too large (for performance)
+        # --------------------------------------------------
+        # Analyzing 1M events is slow
+        # 10,000 events is representative and fast
         if len(data) > self.sample_size:
             data_sample = data.sample(n=self.sample_size, random_state=42)
             logger.info(f"Sampled {self.sample_size} events for analysis")
         else:
             data_sample = data
         
-        # Identify numeric channels
+        # Step 2: Identify numeric channels (only these can be plotted)
+        # -------------------------------------------------------------
         numeric_channels = data_sample.select_dtypes(include=[np.number]).columns.tolist()
         
-        # Remove non-data columns
+        # Remove metadata columns that aren't measurement channels
+        # These don't represent actual cytometry measurements
         exclude_cols = ['sample_id', 'event_id', 'Time', 'time', 'index']
         numeric_channels = [col for col in numeric_channels if col not in exclude_cols]
         
-        # Categorize channels
+        # Step 3: Categorize channels by type
+        # -----------------------------------
+        # Scatter channels: FSC, SSC (particle physical properties)
+        # Fluorescence channels: FL, PE, FITC, etc. (marker expression)
         scatter_channels = self._identify_scatter_channels(numeric_channels)
         fluorescence_channels = self._identify_fluorescence_channels(numeric_channels)
         
         logger.info(f"Found {len(scatter_channels)} scatter channels, {len(fluorescence_channels)} fluorescence channels")
         
-        # Calculate channel metrics
-        channel_metrics = self._calculate_channel_metrics(data_sample[numeric_channels])
+        # Step 4: Calculate metrics for each channel
+        # ------------------------------------------
+        # Metrics include: variance, dynamic range, bimodality
+        # These help us pick the most informative channels
+        channel_data = data_sample[numeric_channels]
+        channel_metrics = self._calculate_channel_metrics(channel_data if isinstance(channel_data, pd.DataFrame) else pd.DataFrame(channel_data))
         
-        # Generate candidate pairs
+        # Step 5: Generate candidate channel pairs
+        # ----------------------------------------
+        # We'll build a list of (x_channel, y_channel, score, description)
         candidate_pairs = []
         
-        # 1. Always recommend FSC vs SSC (standard gating view)
+        # ============================================================
+        # Priority 1: FSC vs SSC (Standard Gating View)
+        # ============================================================
+        # ALWAYS recommend FSC vs SSC as the first plot
+        # This is the universal starting point in flow cytometry
+        # Used for: Initial gating, doublet discrimination, debris removal
         if include_scatter and scatter_channels:
+            # Find FSC channels (forward scatter)
             fsc_candidates = [ch for ch in scatter_channels if 'FSC' in ch.upper() or 'VFSC' in ch.upper()]
+            # Find SSC channels (side scatter)
             ssc_candidates = [ch for ch in scatter_channels if 'SSC' in ch.upper() or 'VSSC' in ch.upper()]
             
             if fsc_candidates and ssc_candidates:
                 # Use first available FSC and SSC
+                # Usually 'VFSC-A' and 'VSSC1-A' or 'FSC-A' and 'SSC-A'
                 fsc = fsc_candidates[0]
                 ssc = ssc_candidates[0]
+                # Calculate score and boost by 1.5x (prioritize standard view)
                 score = self._calculate_pair_score(data_sample, fsc, ssc, channel_metrics)
-                candidate_pairs.append((fsc, ssc, score * 1.5, "Standard gating view"))  # Boost score
+                candidate_pairs.append((fsc, ssc, score * 1.5, "Standard gating view"))
                 logger.info(f"Standard view: {fsc} vs {ssc} (score: {score*1.5:.3f})")
         
-        # 2. Fluorescence vs Scatter combinations
+        # ============================================================
+        # Priority 2: Fluorescence vs Scatter
+        # ============================================================
+        # Example: CD81 vs FSC (marker expression vs particle size)
+        # Answers: "What size are the marker-positive EVs?"
         if include_fluorescence and include_scatter:
             for fl_ch in fluorescence_channels[:5]:  # Top 5 fluorescence channels
                 for scatter_ch in scatter_channels[:2]:  # Top 2 scatter channels
                     score = self._calculate_pair_score(data_sample, fl_ch, scatter_ch, channel_metrics)
-                    if score > 0.3:  # Minimum threshold
+                    if score > 0.3:  # Minimum threshold (avoid noisy/boring channels)
                         candidate_pairs.append((fl_ch, scatter_ch, score, "Fluorescence vs Scatter"))
         
-        # 3. Fluorescence vs Fluorescence combinations (marker analysis)
+        # ============================================================
+        # Priority 3: Fluorescence vs Fluorescence (Multi-Marker)
+        # ============================================================
+        # Example: CD81 vs CD9 (co-expression analysis)
+        # Answers: "Do CD81+ EVs also express CD9?"
         if include_fluorescence and len(fluorescence_channels) >= 2:
             for i, fl_ch1 in enumerate(fluorescence_channels[:8]):
                 for fl_ch2 in fluorescence_channels[i+1:8]:
-                    # Check correlation (avoid redundant pairs)
-                    corr = data_sample[[fl_ch1, fl_ch2]].corr().iloc[0, 1]
+                    # Check correlation to avoid redundant pairs
+                    # If two channels are highly correlated (r > 0.95),
+                    # they contain the same information (redundant)
+                    pair_corr = data_sample[[fl_ch1, fl_ch2]].corr(method='pearson')  # type: ignore[call-arg]
+                    corr = pair_corr.iloc[0, 1]
                     if abs(corr) < self.max_correlation_threshold:
                         score = self._calculate_pair_score(data_sample, fl_ch1, fl_ch2, channel_metrics)
                         if score > 0.3:
                             candidate_pairs.append((fl_ch1, fl_ch2, score, "Multi-marker analysis"))
         
-        # 4. Scatter vs Scatter combinations (if multiple scatter types)
+        # ============================================================
+        # Priority 4: Scatter vs Scatter
+        # ============================================================
+        # Example: FSC-A vs FSC-H (doublet discrimination)
+        # Answers: "Are there doublets (stuck-together EVs)?"
         if include_scatter and len(scatter_channels) >= 2:
             for i, sc1 in enumerate(scatter_channels[:4]):
                 for sc2 in scatter_channels[i+1:4]:
@@ -267,7 +346,8 @@ class AutoAxisSelector:
         variance_score = np.clip((x_var + y_var) / 2, 0, 1)
         
         # Component 2: Correlation score (lower correlation = higher score)
-        correlation = abs(pair_data.corr().iloc[0, 1])
+        pair_corr_matrix = pair_data.corr(method='pearson')  # type: ignore[call-arg]
+        correlation = abs(pair_corr_matrix.iloc[0, 1])
         correlation_score = 1 - min(correlation, 1.0)
         
         # Component 3: Dynamic range score

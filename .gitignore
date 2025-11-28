@@ -54,6 +54,19 @@ processed_data/
 raw_data/
 cache/
 
+# Uploads directory (temporary files)
+uploads/*.fcs
+uploads/*.parquet
+uploads/*.csv
+uploads/*.txt
+uploads/analysis_results.*
+
+# Images (generated plots)
+images/*.png
+images/*.jpg
+images/*.svg
+!images/.gitkeep
+
 # Keep test data directory structure but ignore files
 test_data/*.fcs
 test_data/*.txt
@@ -63,6 +76,21 @@ test_data/**/*.txt
 # Logs
 *.log
 logs/
+*.csv
+
+# Temporary and installation files
+install_*.py
+*_install.py
+reset_*.ps1
+installed_packages.txt
+
+# Progress reports and temporary docs
+*_COMPLETE.md
+*_SUCCESS.md
+*_REPORT.md
+*_SUMMARY.md
+*_FIXES.md
+REMAINING_*.md
 
 # Testing
 .pytest_cache/

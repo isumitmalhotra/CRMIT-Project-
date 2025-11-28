@@ -1,0 +1,30 @@
+================================================================================
+DATA INTEGRATION SUMMARY REPORT
+================================================================================
+
+Date: 2025-11-17 11:55:16
+
+SAMPLE MATCHING:
+  - Total biological samples: 88
+  - Exact matches (FCS + NTA): 0
+  - FCS only: 48
+  - NTA only: 40
+
+COMBINED FEATURES:
+  - Total samples: 88
+  - Total features: 46
+  - FCS features: 20
+  - NTA features: 20
+  - Samples with both FCS + NTA: 0
+
+BASELINE COMPARISON:
+  - Baseline samples: 4
+  - Test samples: 84
+
+DATA QUALITY:
+  - FCS QC: N/A
+  - NTA QC: N/A
+
+================================================================================
+✅ DATA INTEGRATION COMPLETE
+================================================================================

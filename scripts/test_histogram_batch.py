@@ -54,7 +54,8 @@ def main():
             elif 'FSC-A' in data.columns and 'SSC-A' in data.columns:
                 fsc, ssc = 'FSC-A', 'SSC-A'
             else:
-                fsc, ssc = data.columns[0], data.columns[1]
+                fsc = str(data.columns[0])
+                ssc = str(data.columns[1])
             
             # Scatter plot
             plotter.plot_scatter(

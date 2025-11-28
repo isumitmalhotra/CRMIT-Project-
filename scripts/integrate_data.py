@@ -48,7 +48,7 @@ class DataIntegrator:
     - Layer 4: Multi-Modal Fusion (sample matching, feature extraction)
     """
     
-    def __init__(self, output_dir: Path = None):
+    def __init__(self, output_dir: Path | None = None):
         """
         Initialize data integrator with architecture components.
         
@@ -78,7 +78,7 @@ class DataIntegrator:
         fcs_parquet_dir: Path,
         nta_parquet_dir: Path,
         baseline_samples: Optional[List[str]] = None
-    ) -> Dict[str, Path]:
+    ) -> Dict[str, Optional[Path]]:
         """
         Full integration pipeline: FCS + NTA → Combined features.
         
@@ -88,7 +88,82 @@ class DataIntegrator:
             baseline_samples: List of baseline/control sample IDs
         
         Returns:
-            Dictionary with paths to output files
+            Dictionary with paths to output files (some may be None)
+        
+        WHAT THIS DOES:
+        ----------------
+        Integrates data from multiple instruments (NanoFACS + NTA) into a single
+        ML-ready dataset following the 7-layer architecture specification.
+        
+        HOW IT WORKS (9-STEP PIPELINE):
+        ---------------------------------
+        
+        STEP 1: Load Data
+        - Read FCS statistics (batch_process_fcs.py output)
+        - Read NTA statistics (batch_process_nta.py output)
+        - Each instrument provides summary stats per sample
+        
+        STEP 2: Quality Control (Layer 2)
+        - FCS checks: event count, scatter values, CV thresholds
+        - NTA checks: concentration range, size distribution validity
+        - Separates passed/failed samples
+        - Exports QC report for review
+        
+        STEP 3: Normalization (Layer 2)
+        - Standardizes scales across samples
+        - Methods: z-score (mean=0, std=1)
+        - Enables fair comparison between samples
+        - Critical for ML model training
+        
+        STEP 4: Size Binning (Layer 2)
+        - Groups particles: small (40-80nm), medium (80-100nm), large (100-120nm)
+        - NTA: bins based on D50 (median size)
+        - FCS: bins based on FSC-A (scatter intensity)
+        - Architecture requirement for downstream analysis
+        
+        STEP 5: Sample Matching (Layer 4)
+        - Matches FCS and NTA data from same biological sample
+        - Uses fuzzy matching on sample IDs (handles naming variations)
+        - Creates sample registry linking instruments
+        - Example: "P5_F10_CD81" matches across FCS + NTA + TEM
+        
+        STEP 6: Feature Extraction (Layer 4)
+        - FCS features: scatter stats, intensity stats, size distribution
+        - NTA features: D10/D50/D90, concentration, bin percentages
+        - Standardized feature naming (fcs_*, nta_*, cross_*)
+        
+        STEP 7: Merge Features (Layer 4)
+        - Combines FCS + NTA features using sample registry
+        - Creates unified feature matrix (samples × features)
+        - Handles missing data (samples with only FCS or only NTA)
+        - Output: combined_features.parquet (ML-ready)
+        
+        STEP 8: Baseline Comparisons (Optional)
+        - Calculates fold changes vs control samples
+        - Enables "treatment effect" analysis
+        - Example: CD81-treated vs Isotype control
+        - Output: baseline_comparison.parquet
+        
+        STEP 9: Summary Report
+        - Human-readable text summary
+        - Match statistics, QC pass rates, feature counts
+        - Architecture compliance checklist
+        
+        WHY THIS ARCHITECTURE:
+        ----------------------
+        - Modular: Each layer is independent (can swap implementations)
+        - Testable: Each component can be unit tested
+        - Extensible: Easy to add new instruments (TEM, Western Blot)
+        - ML-ready: Output format optimized for scikit-learn, TensorFlow
+        
+        OUTPUT FILES:
+        --------------
+        1. sample_metadata.parquet - Sample registry with matches
+        2. combined_features.parquet - ML-ready feature matrix
+        3. baseline_comparison.parquet - Fold changes vs controls
+        4. qc_report.csv - Quality control results
+        5. match_report.csv - Sample matching details
+        6. integration_summary.txt - Human-readable summary
         """
         logger.info("=" * 80)
         logger.info("🚀 STARTING MULTI-MODAL DATA INTEGRATION (Task 1.3)")
@@ -196,7 +271,7 @@ class DataIntegrator:
         return {
             'sample_metadata': registry_path,
             'combined_features': combined_path,
-            'baseline_comparison': baseline_path,
+            'baseline_comparison': baseline_path if baseline_path else None,
             'qc_report': qc_report_path,
             'match_report': match_report_path,
             'summary': summary_path
